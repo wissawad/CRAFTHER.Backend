@@ -1,12 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using System; // ต้องเพิ่ม using System; สำหรับ Guid
+using System;
 
 namespace CRAFTHER.Backend.DTOs.UnitConversions
 {
     public class CreateUnitConversionDto
     {
-        [Required(ErrorMessage = "Organization ID is required.")]
-        public Guid OrganizationId { get; set; } 
+        // OrganizationId จะถูกดึงจาก JWT Claim ใน Controller และ Service
+        // ไม่จำเป็นต้องให้ Client ส่งมาโดยตรงใน DTO นี้ เพื่อป้องกันการปลอมแปลง
 
         [Required(ErrorMessage = "From Unit ID is required.")]
         public Guid FromUnitId { get; set; }

@@ -18,6 +18,7 @@ namespace CRAFTHER.Backend.Data
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; } = default!;
         public DbSet<UnitGroup> UnitGroups { get; set; } = default!;
         public DbSet<UnitOfMeasure> UnitsOfMeasures { get; set; } = default!;
+        public DbSet<ItemCategory> ItemCategories { get; set; } = default!; 
         public DbSet<Component> Components { get; set; } = default!;
         public DbSet<Product> Products { get; set; } = default!;
         public DbSet<BOMItem> BOMItems { get; set; } = default!;
@@ -315,6 +316,20 @@ namespace CRAFTHER.Backend.Data
                     CanAccessAdvancedReports = true,
                     CanIntegratePOS = true
                 }
+            );
+
+            // ItemCategory Configuration and Seeding
+            modelBuilder.Entity<ItemCategory>().HasIndex(ic => ic.CategoryName).IsUnique();
+            modelBuilder.Entity<ItemCategory>().HasData(
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000001"), CategoryName = "Food Ingredient", Description = "Raw materials used in food and beverage production.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000002"), CategoryName = "Beverage Ingredient", Description = "Raw materials used in beverage production.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000003"), CategoryName = "Finished Food Product", Description = "Ready-to-sell food items.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000004"), CategoryName = "Finished Beverage Product", Description = "Ready-to-sell beverage items.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000005"), CategoryName = "Fabric", Description = "Textile materials for garment production.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // New for clothing
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000006"), CategoryName = "Accessory (Clothing)", Description = "Buttons, zippers, threads, etc. for clothing.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // New for clothing
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000007"), CategoryName = "Finished Garment", Description = "Ready-to-sell clothing items.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // New for clothing
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000008"), CategoryName = "Packaging Material", Description = "Materials used for product packaging.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new ItemCategory { ItemCategoryId = Guid.Parse("C0000000-0000-0000-0000-000000000009"), CategoryName = "Other", Description = "Miscellaneous items not fitting other categories.", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
             );
 
             // Seeding QuestTypes

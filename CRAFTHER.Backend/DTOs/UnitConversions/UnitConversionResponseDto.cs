@@ -5,8 +5,8 @@ namespace CRAFTHER.Backend.DTOs.UnitConversions
     public class UnitConversionResponseDto
     {
         public Guid UnitConversionId { get; set; }
-        public Guid OrganizationId { get; set; } // เพิ่ม OrganizationId กลับมา
-        public string OrganizationName { get; set; } = string.Empty; // อาจจะดึงชื่อ Organization มาแสดงด้วย
+        public Guid OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = string.Empty; // ชื่อ Organization ที่เกี่ยวข้อง
         public Guid FromUnitId { get; set; }
         public string FromUnitName { get; set; } = string.Empty;
         public string FromUnitAbbreviation { get; set; } = string.Empty;

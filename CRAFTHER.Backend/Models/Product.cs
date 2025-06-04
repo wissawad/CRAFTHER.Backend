@@ -50,6 +50,11 @@ namespace CRAFTHER.Backend.Models
         public bool IsSubProduct { get; set; }
 
         [Required]
+        public Guid ItemCategoryId { get; set; } // Foreign Key to ItemCategory
+        [ForeignKey(nameof(ItemCategoryId))]
+        public ItemCategory? ItemCategory { get; set; }
+        
+        [Required]
         public Guid OrganizationId { get; set; }
         [ForeignKey(nameof(OrganizationId))]
         public Organization? Organization { get; set; }

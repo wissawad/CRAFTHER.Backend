@@ -4,6 +4,7 @@ using CRAFTHER.Backend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CRAFTHER.Backend.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250604113703_AddRemarksToUnitConversion")]
+    partial class AddRemarksToUnitConversion
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -233,9 +236,6 @@ namespace CRAFTHER.Backend.Migrations
                     b.Property<Guid>("InventoryUnitId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ItemCategoryId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<decimal>("MinimumStockLevel")
                         .HasColumnType("decimal(18, 4)");
 
@@ -258,117 +258,12 @@ namespace CRAFTHER.Backend.Migrations
 
                     b.HasIndex("InventoryUnitId");
 
-                    b.HasIndex("ItemCategoryId");
-
                     b.HasIndex("PurchaseUnitId");
 
                     b.HasIndex("OrganizationId", "ComponentCode")
                         .IsUnique();
 
                     b.ToTable("Components");
-                });
-
-            modelBuilder.Entity("CRAFTHER.Backend.Models.ItemCategory", b =>
-                {
-                    b.Property<Guid>("ItemCategoryId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("CategoryName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("ItemCategoryId");
-
-                    b.HasIndex("CategoryName")
-                        .IsUnique();
-
-                    b.ToTable("ItemCategories");
-
-                    b.HasData(
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000001"),
-                            CategoryName = "Food Ingredient",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8316),
-                            Description = "Raw materials used in food and beverage production.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8318)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000002"),
-                            CategoryName = "Beverage Ingredient",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8333),
-                            Description = "Raw materials used in beverage production.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8335)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000003"),
-                            CategoryName = "Finished Food Product",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8340),
-                            Description = "Ready-to-sell food items.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8340)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000004"),
-                            CategoryName = "Finished Beverage Product",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8344),
-                            Description = "Ready-to-sell beverage items.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8345)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000005"),
-                            CategoryName = "Fabric",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8348),
-                            Description = "Textile materials for garment production.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8349)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000006"),
-                            CategoryName = "Accessory (Clothing)",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8353),
-                            Description = "Buttons, zippers, threads, etc. for clothing.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8353)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000007"),
-                            CategoryName = "Finished Garment",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8357),
-                            Description = "Ready-to-sell clothing items.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8357)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000008"),
-                            CategoryName = "Packaging Material",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8361),
-                            Description = "Materials used for product packaging.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8361)
-                        },
-                        new
-                        {
-                            ItemCategoryId = new Guid("c0000000-0000-0000-0000-000000000009"),
-                            CategoryName = "Other",
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8366),
-                            Description = "Miscellaneous items not fitting other categories.",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8366)
-                        });
                 });
 
             modelBuilder.Entity("CRAFTHER.Backend.Models.Level", b =>
@@ -410,52 +305,52 @@ namespace CRAFTHER.Backend.Migrations
                         new
                         {
                             LevelId = new Guid("e1f2a3b4-c5d6-e7f8-a9b0-c1d2e3f4a5b6"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8531),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4867),
                             Description = "Just starting your BOM journey.",
                             LevelName = "BOM Novice",
                             LevelNumber = 1,
                             RequiredPoints = 0,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8531)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4868)
                         },
                         new
                         {
                             LevelId = new Guid("f2a3b4c5-d6e7-f8a9-b0c1-d2e3f4a5b6c7"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8537),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4874),
                             Description = "Learning the ropes of recipe management.",
                             LevelName = "Recipe Apprentice",
                             LevelNumber = 2,
                             RequiredPoints = 100,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8538)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4874)
                         },
                         new
                         {
                             LevelId = new Guid("a0b1c2d3-e4f5-a6b7-c8d9-e0f1a2b3c4d5"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8542),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4881),
                             Description = "Mastering your ingredient knowledge.",
                             LevelName = "Ingredient Explorer",
                             LevelNumber = 3,
                             RequiredPoints = 300,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8542)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4881)
                         },
                         new
                         {
                             LevelId = new Guid("b1c2d3e4-f5a6-b7c8-d9e0-f1a2b3c4d5e6"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8546),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4884),
                             Description = "Becoming an expert in cost analysis.",
                             LevelName = "Costing Pro",
                             LevelNumber = 4,
                             RequiredPoints = 600,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8547)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4885)
                         },
                         new
                         {
                             LevelId = new Guid("c2d3e4f5-a6b7-c8d9-e0f1-a2b3c4d5e6f7"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8553),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4888),
                             Description = "The ultimate CRAFTHER champion!",
                             LevelName = "CRAFTHER Master",
                             LevelNumber = 5,
                             RequiredPoints = 1000,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8553)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4888)
                         });
                 });
 
@@ -540,34 +435,34 @@ namespace CRAFTHER.Backend.Migrations
                         new
                         {
                             IndustryTypeId = new Guid("a1b2c3d4-e5f6-7890-1234-567890abcdef"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6872),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4635),
                             Description = "Businesses primarily focused on coffee, tea, and light snacks.",
                             IndustryTypeName = "Cafe / Coffee Shop",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6875)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4638)
                         },
                         new
                         {
                             IndustryTypeId = new Guid("b2c3d4e5-f6a1-2345-6789-0abcdef12345"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6880),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4642),
                             Description = "Businesses specializing in baked goods, pastries, and sweets.",
                             IndustryTypeName = "Bakery / Confectionery",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6881)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4643)
                         },
                         new
                         {
                             IndustryTypeId = new Guid("c3d4e5f6-a1b2-3456-7890-cdef12345678"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6883),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4647),
                             Description = "Businesses serving prepared meals and beverages.",
                             IndustryTypeName = "Restaurant / Eatery",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6884)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4647)
                         },
                         new
                         {
                             IndustryTypeId = new Guid("d4e5f6a1-b2c3-4567-890a-bcdef1234567"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6887),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4652),
                             Description = "Businesses producing and selling handmade products.",
                             IndustryTypeName = "Crafts / Handmade Goods",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6887)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4652)
                         });
                 });
 
@@ -596,9 +491,6 @@ namespace CRAFTHER.Backend.Migrations
 
                     b.Property<bool>("IsSubProduct")
                         .HasColumnType("bit");
-
-                    b.Property<Guid>("ItemCategoryId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
@@ -630,8 +522,6 @@ namespace CRAFTHER.Backend.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("ProductId");
-
-                    b.HasIndex("ItemCategoryId");
 
                     b.HasIndex("ProductUnitId");
 
@@ -728,34 +618,34 @@ namespace CRAFTHER.Backend.Migrations
                         new
                         {
                             QuestTypeId = new Guid("a1b2c3d4-e5f6-7890-abcd-ef0123456789"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8476),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4814),
                             Description = "Quests that refresh daily.",
                             QuestTypeName = "DAILY",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8476)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4815)
                         },
                         new
                         {
                             QuestTypeId = new Guid("b2c3d4e5-f6a1-2345-cdef-0123456789ab"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8481),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4819),
                             Description = "Quests that refresh weekly.",
                             QuestTypeName = "WEEKLY",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8482)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4819)
                         },
                         new
                         {
                             QuestTypeId = new Guid("c3d4e5f6-a1b2-3456-7890-abcdef012345"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8484),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4821),
                             Description = "Core progression quests.",
                             QuestTypeName = "MAIN_STORY",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8484)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4822)
                         },
                         new
                         {
                             QuestTypeId = new Guid("d4e5f6a1-b2c3-4567-890a-bcdef0123456"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8486),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4824),
                             Description = "Difficult, one-time challenges.",
                             QuestTypeName = "CHALLENGE",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(8487)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4824)
                         });
                 });
 
@@ -844,50 +734,50 @@ namespace CRAFTHER.Backend.Migrations
                         new
                         {
                             AdjustmentTypeId = new Guid("01a1b2c3-d4e5-6f78-9012-3456789abc01"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1480),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9294),
                             Effect = "Increase",
                             Name = "Receive",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1481)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9295)
                         },
                         new
                         {
                             AdjustmentTypeId = new Guid("02a1b2c3-d4e5-6f78-9012-3456789abc02"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1488),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9299),
                             Effect = "Decrease",
                             Name = "Issue",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1489)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9299)
                         },
                         new
                         {
                             AdjustmentTypeId = new Guid("03a1b2c3-d4e5-6f78-9012-3456789abc03"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1497),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9302),
                             Effect = "Increase",
                             Name = "Positive Adjustment",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1498)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9303)
                         },
                         new
                         {
                             AdjustmentTypeId = new Guid("04a1b2c3-d4e5-6f78-9012-3456789abc04"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1516),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9315),
                             Effect = "Decrease",
                             Name = "Negative Adjustment",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1517)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9315)
                         },
                         new
                         {
                             AdjustmentTypeId = new Guid("05a1b2c3-d4e5-6f78-9012-3456789abc05"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1521),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9318),
                             Effect = "Increase",
                             Name = "Production In",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1522)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9319)
                         },
                         new
                         {
                             AdjustmentTypeId = new Guid("06a1b2c3-d4e5-6f78-9012-3456789abc06"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1527),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9322),
                             Effect = "Decrease",
                             Name = "Consumption",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 5, DateTimeKind.Utc).AddTicks(1527)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 730, DateTimeKind.Utc).AddTicks(9322)
                         });
                 });
 
@@ -943,7 +833,7 @@ namespace CRAFTHER.Backend.Migrations
                             PlanId = new Guid("11223344-5566-7788-99aa-bbccddeeff00"),
                             CanAccessAdvancedReports = false,
                             CanIntegratePOS = false,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6984),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4744),
                             Description = "Basic features for small businesses to get started.",
                             MaxComponents = 20,
                             MaxProducts = 5,
@@ -951,14 +841,14 @@ namespace CRAFTHER.Backend.Migrations
                             PlanName = "Free",
                             Price = 0.00m,
                             StorageSpaceMB = 50,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6985)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4745)
                         },
                         new
                         {
                             PlanId = new Guid("aabbccdd-eeff-1122-3344-5566778899aa"),
                             CanAccessAdvancedReports = true,
                             CanIntegratePOS = false,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6997),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4766),
                             Description = "Essential tools for growing businesses.",
                             MaxComponents = 200,
                             MaxProducts = 50,
@@ -966,14 +856,14 @@ namespace CRAFTHER.Backend.Migrations
                             PlanName = "Basic",
                             Price = 199.00m,
                             StorageSpaceMB = 500,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(6997)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4767)
                         },
                         new
                         {
                             PlanId = new Guid("ccddeeff-aabb-3344-5566-778899aabbcc"),
                             CanAccessAdvancedReports = true,
                             CanIntegratePOS = true,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(7002),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4771),
                             Description = "Advanced features for established businesses.",
                             MaxComponents = 0,
                             MaxProducts = 0,
@@ -981,7 +871,7 @@ namespace CRAFTHER.Backend.Migrations
                             PlanName = "Pro",
                             Price = 499.00m,
                             StorageSpaceMB = 5000,
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 8, 24, DateTimeKind.Utc).AddTicks(7002)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 736, DateTimeKind.Utc).AddTicks(4771)
                         });
                 });
 
@@ -1057,30 +947,30 @@ namespace CRAFTHER.Backend.Migrations
                         new
                         {
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9092),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2514),
                             UnitGroupName = "Weight",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9092)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2514)
                         },
                         new
                         {
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9099),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2519),
                             UnitGroupName = "Volume",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9099)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2519)
                         },
                         new
                         {
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9104),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2522),
                             UnitGroupName = "Count",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9105)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2523)
                         },
                         new
                         {
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9110),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2526),
                             UnitGroupName = "Length",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 996, DateTimeKind.Utc).AddTicks(9111)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(2526)
                         });
                 });
 
@@ -1135,165 +1025,165 @@ namespace CRAFTHER.Backend.Migrations
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000001"),
                             Abbreviation = "g",
                             ConversionFactorToBaseUnit = 1.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4165),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8810),
                             IsBaseUnit = true,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
                             UnitName = "Gram",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4166)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8811)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000002"),
                             Abbreviation = "kg",
                             ConversionFactorToBaseUnit = 1000.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4175),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8816),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
                             UnitName = "Kilogram",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4176)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8816)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000003"),
                             Abbreviation = "mg",
                             ConversionFactorToBaseUnit = 0.001m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4182),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8830),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
                             UnitName = "Milligram",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4183)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8831)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000004"),
                             Abbreviation = "lb",
                             ConversionFactorToBaseUnit = 453.59237m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4196),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8834),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
                             UnitName = "Pound",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4197)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8835)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000005"),
                             Abbreviation = "oz",
                             ConversionFactorToBaseUnit = 28.349523125m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4204),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8840),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000001"),
                             UnitName = "Ounce",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4205)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8841)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000006"),
                             Abbreviation = "ml",
                             ConversionFactorToBaseUnit = 1.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4211),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8845),
                             IsBaseUnit = true,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
                             UnitName = "Milliliter",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4211)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8845)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000007"),
                             Abbreviation = "l",
                             ConversionFactorToBaseUnit = 1000.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4218),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8849),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
                             UnitName = "Liter",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4218)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8850)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000008"),
                             Abbreviation = "tsp",
                             ConversionFactorToBaseUnit = 4.92892m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4237),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8853),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
                             UnitName = "Teaspoon",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4237)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8854)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-000000000009"),
                             Abbreviation = "tbsp",
                             ConversionFactorToBaseUnit = 14.7868m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4243),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8858),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
                             UnitName = "Tablespoon",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4243)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8858)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000a"),
                             Abbreviation = "cup",
                             ConversionFactorToBaseUnit = 236.588m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4249),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8862),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000002"),
                             UnitName = "Cup",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4249)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8862)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000b"),
                             Abbreviation = "pcs",
                             ConversionFactorToBaseUnit = 1.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4256),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8869),
                             IsBaseUnit = true,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000003"),
                             UnitName = "Piece",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4256)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8869)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000c"),
                             Abbreviation = "dz",
                             ConversionFactorToBaseUnit = 12.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4263),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8873),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000003"),
                             UnitName = "Dozen",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4263)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8874)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000d"),
                             Abbreviation = "pr",
                             ConversionFactorToBaseUnit = 2.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4320),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8877),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000003"),
                             UnitName = "Pair",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4321)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8878)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000e"),
                             Abbreviation = "m",
                             ConversionFactorToBaseUnit = 1.0m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4328),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8881),
                             IsBaseUnit = true,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000004"),
                             UnitName = "Meter",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4329)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8882)
                         },
                         new
                         {
                             UnitId = new Guid("b0000000-0000-0000-0000-00000000000f"),
                             Abbreviation = "cm",
                             ConversionFactorToBaseUnit = 0.01m,
-                            CreatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4343),
+                            CreatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8886),
                             IsBaseUnit = false,
                             UnitGroupId = new Guid("a0000000-0000-0000-0000-000000000004"),
                             UnitName = "Centimeter",
-                            UpdatedAt = new DateTime(2025, 6, 4, 12, 37, 7, 998, DateTimeKind.Utc).AddTicks(4344)
+                            UpdatedAt = new DateTime(2025, 6, 4, 11, 37, 1, 728, DateTimeKind.Utc).AddTicks(8887)
                         });
                 });
 
@@ -1524,12 +1414,6 @@ namespace CRAFTHER.Backend.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("CRAFTHER.Backend.Models.ItemCategory", "ItemCategory")
-                        .WithMany()
-                        .HasForeignKey("ItemCategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("CRAFTHER.Backend.Models.Organization", "Organization")
                         .WithMany("Components")
                         .HasForeignKey("OrganizationId")
@@ -1543,8 +1427,6 @@ namespace CRAFTHER.Backend.Migrations
                         .IsRequired();
 
                     b.Navigation("InventoryUnit");
-
-                    b.Navigation("ItemCategory");
 
                     b.Navigation("Organization");
 
@@ -1572,12 +1454,6 @@ namespace CRAFTHER.Backend.Migrations
 
             modelBuilder.Entity("CRAFTHER.Backend.Models.Product", b =>
                 {
-                    b.HasOne("CRAFTHER.Backend.Models.ItemCategory", "ItemCategory")
-                        .WithMany()
-                        .HasForeignKey("ItemCategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("CRAFTHER.Backend.Models.Organization", "Organization")
                         .WithMany("Products")
                         .HasForeignKey("OrganizationId")
@@ -1595,8 +1471,6 @@ namespace CRAFTHER.Backend.Migrations
                         .HasForeignKey("SaleUnitId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("ItemCategory");
 
                     b.Navigation("Organization");
 

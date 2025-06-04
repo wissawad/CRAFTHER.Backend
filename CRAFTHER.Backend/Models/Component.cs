@@ -49,6 +49,11 @@ namespace CRAFTHER.Backend.Models
         public decimal MinimumStockLevel { get; set; }
 
         [Required]
+        public Guid ItemCategoryId { get; set; }
+        [ForeignKey(nameof(ItemCategoryId))]
+        public ItemCategory? ItemCategory { get; set; }
+        
+        [Required]
         public Guid OrganizationId { get; set; }
         [ForeignKey(nameof(OrganizationId))]
         public Organization? Organization { get; set; }

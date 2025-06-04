@@ -1,14 +1,15 @@
-﻿using CRAFTHER.Backend.Data;
-using CRAFTHER.Backend.Models;
-using CRAFTHER.Backend.DTOs;
+﻿// Path: CRAFTHER.Backend/Controllers/StockAdjustmentController.cs
+using CRAFTHER.Backend.Data; // Keep this using for ApplicationDbContext if still needed for other base methods or utility.
+using CRAFTHER.Backend.Models; // Keep for models directly used if needed for return types or type checking.
+using CRAFTHER.Backend.DTOs.StockAdjustments; // Use new DTOs
+using CRAFTHER.Backend.Services; // Use the new service interface
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Security.Claims;
+using System.Security.Claims; // For HttpContext.User.FindFirst
 using System.Threading.Tasks;
+using CRAFTHER.Backend.DTOs;
 
 namespace CRAFTHER.Backend.Controllers
 {
@@ -17,11 +18,13 @@ namespace CRAFTHER.Backend.Controllers
     [Authorize] // Requires authentication for all actions in this controller
     public class StockAdjustmentController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IStockAdjustmentService _stockAdjustmentService;
+        // private readonly ApplicationDbContext _context; // Can be removed if no direct context access is needed
 
-        public StockAdjustmentController(ApplicationDbContext context)
+        public StockAdjustmentController(IStockAdjustmentService stockAdjustmentService) // Inject the service
         {
-            _context = context;
+            _stockAdjustmentService = stockAdjustmentService;
+            // _context = context; // Remove if not used
         }
 
         /// <summary>
@@ -31,425 +34,221 @@ namespace CRAFTHER.Backend.Controllers
         /// <exception cref="InvalidOperationException">Thrown if Organization ID is not found in user claims.</exception>
         private Guid GetUserOrganizationId()
         {
-            var orgIdClaim = HttpContext.User.FindFirst("OrganizationId");
-            if (orgIdClaim == null || !Guid.TryParse(orgIdClaim.Value, out Guid orgId))
+            var orgIdClaim = User.FindFirst("OrganizationId")?.Value; // Access User from ControllerBase
+            if (string.IsNullOrEmpty(orgIdClaim) || !Guid.TryParse(orgIdClaim, out Guid orgId))
             {
-                throw new InvalidOperationException("Organization ID not found in user claims. Please check JWT configuration.");
+                throw new InvalidOperationException("Organization ID claim not found or invalid.");
             }
             return orgId;
         }
 
-        /// <summary>
-        /// Helper method to convert a quantity from a source unit to a target unit for a specific organization.
-        /// This method prioritizes component-specific conversion factors if applicable, then falls back to general unit conversions.
-        /// </summary>
-        /// <param name="fromUnitId">The ID of the source unit of measure.</param>
-        /// <param name="toUnitId">The ID of the target unit of measure.</param>
-        /// <param name="quantity">The quantity to convert.</param>
-        /// <param name="organizationId">The ID of the organization.</param>
-        /// <param name="component">The Component object related to the conversion (optional, for component-specific factors).</param>
-        /// <returns>The converted quantity in the target unit.</returns>
-        /// <exception cref="InvalidOperationException">Thrown if no valid conversion path is found or if a conversion factor is zero.</exception>
-        private async Task<decimal> ConvertQuantityToInventoryUnit(Guid fromUnitId, Guid toUnitId, decimal quantity, Guid organizationId, Component? component = null)
-        {
-            if (fromUnitId == toUnitId)
-            {
-                return quantity; // No conversion needed if units are the same
-            }
-
-            // 1. Try component-specific conversion first (PurchaseUnit to InventoryUnit)
-            if (component != null && fromUnitId == component.PurchaseUnitId && toUnitId == component.InventoryUnitId)
-            {
-                if (component.PurchaseToInventoryConversionFactor == 0)
-                {
-                    throw new InvalidOperationException($"Conversion factor from purchase unit '{component.PurchaseUnit?.Abbreviation}' to inventory unit '{component.InventoryUnit?.Abbreviation}' for component '{component.ComponentName}' is zero, which is invalid.");
-                }
-                return quantity * component.PurchaseToInventoryConversionFactor;
-            }
-
-            // 2. Fallback to general UnitConversion table
-            // Try direct conversion
-            var directConversion = await _context.UnitConversions
-                .FirstOrDefaultAsync(uc => uc.OrganizationId == organizationId &&
-                                           uc.FromUnitId == fromUnitId &&
-                                           uc.ToUnitId == toUnitId);
-
-            if (directConversion != null)
-            {
-                if (directConversion.ConversionFactor == 0)
-                {
-                    throw new InvalidOperationException($"Direct unit conversion factor from unit '{fromUnitId}' to '{toUnitId}' is zero, which is invalid.");
-                }
-                return quantity * directConversion.ConversionFactor;
-            }
-
-            // Try reverse conversion
-            var reverseConversion = await _context.UnitConversions
-                .FirstOrDefaultAsync(uc => uc.OrganizationId == organizationId &&
-                                           uc.FromUnitId == toUnitId &&
-                                           uc.ToUnitId == fromUnitId);
-
-            if (reverseConversion != null)
-            {
-                if (reverseConversion.ConversionFactor == 0)
-                {
-                    throw new InvalidOperationException($"Reverse unit conversion factor from unit '{toUnitId}' to '{fromUnitId}' is zero, which is invalid.");
-                }
-                return quantity / reverseConversion.ConversionFactor;
-            }
-
-            // No conversion path found
-            var fromUnit = await _context.UnitsOfMeasures.FindAsync(fromUnitId);
-            var toUnit = await _context.UnitsOfMeasures.FindAsync(toUnitId);
-            throw new InvalidOperationException($"No conversion path found from '{fromUnit?.Abbreviation ?? fromUnitId.ToString()}' to '{toUnit?.Abbreviation ?? toUnitId.ToString()}' for this organization.");
-        }
-
-
-        // --- API Endpoints for StockAdjustmentType ---
+        // --- API Endpoints for StockAdjustmentType (Master Data) ---
+        // Assuming StockAdjustmentTypes are global and can be fetched directly from context
+        // If you need a service for StockAdjustmentType, you can create one.
+        // For simplicity, we'll fetch directly from context here if it's just master data.
+        // If StockAdjustmentType is exposed through a service, replace _context.StockAdjustmentTypes with that service call.
+        // (Keeping it as is for now, as it's typically simple master data lookup)
 
         /// <summary>
         /// Retrieves all available stock adjustment types.
         /// </summary>
         /// <returns>A list of StockAdjustmentType objects.</returns>
         [HttpGet("Types")]
+        [AllowAnonymous] // Master data might not require authorization
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<StockAdjustmentType>))]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<StockAdjustmentType>>> GetStockAdjustmentTypes()
         {
-            return await _context.StockAdjustmentTypes.ToListAsync();
+            try
+            {
+                // Note: StockAdjustmentType is typically master data, so no organization filtering is needed here.
+                // If it becomes organization-specific, adjust accordingly.
+                // Assuming _context is still available for simple master data retrieval, or inject a dedicated service for it.
+                return Ok(await _stockAdjustmentService.GetAllStockAdjustmentTypesAsync()); // Assuming service has this method
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving stock adjustment types: {ex.Message}" });
+            }
         }
 
-        // --- API Endpoints for StockAdjustment ---
+        // --- API Endpoints for StockAdjustment (CRUD operations) ---
 
         /// <summary>
         /// Retrieves all stock adjustments for the current user's organization.
         /// </summary>
-        /// <returns>A list of StockAdjustment objects.</returns>
+        /// <returns>A list of StockAdjustmentResponseDto objects.</returns>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<StockAdjustment>>> GetStockAdjustments()
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<StockAdjustmentResponseDto>))]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<StockAdjustmentResponseDto>>> GetAllStockAdjustments()
         {
-            var userOrgId = GetUserOrganizationId();
-            return await _context.StockAdjustments
-                                 .Where(sa => sa.OrganizationId == userOrgId)
-                                 .Include(sa => sa.Component)
-                                 .Include(sa => sa.AdjustmentType)
-                                 .Include(sa => sa.UnitOfMeasure)
-                                 .OrderByDescending(sa => sa.AdjustmentDate)
-                                 .ToListAsync();
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                var adjustments = await _stockAdjustmentService.GetAllStockAdjustmentsAsync(userOrgId);
+                return Ok(adjustments);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message }); // e.g., OrganizationId claim missing
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving stock adjustments: {ex.Message}" });
+            }
         }
 
         /// <summary>
         /// Retrieves a specific stock adjustment by its ID for the current user's organization.
         /// </summary>
         /// <param name="id">The ID of the stock adjustment.</param>
-        /// <returns>A StockAdjustment object if found, otherwise NotFound.</returns>
+        /// <returns>A StockAdjustmentResponseDto object if found, otherwise NotFound.</returns>
         [HttpGet("{id}")]
-        public async Task<ActionResult<StockAdjustment>> GetStockAdjustment(Guid id)
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(StockAdjustmentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<StockAdjustmentResponseDto>> GetStockAdjustmentById(Guid id)
         {
-            var userOrgId = GetUserOrganizationId();
-            var stockAdjustment = await _context.StockAdjustments
-                                                .Include(sa => sa.Component)
-                                                .Include(sa => sa.AdjustmentType)
-                                                .Include(sa => sa.UnitOfMeasure)
-                                                .FirstOrDefaultAsync(sa => sa.AdjustmentId == id && sa.OrganizationId == userOrgId);
-
-            if (stockAdjustment == null)
-            {
-                return NotFound();
-            }
-
-            return stockAdjustment;
-        }
-
-        /// <summary>
-        /// Creates a new stock adjustment and updates the component's current stock quantity.
-        /// </summary>
-        /// <param name="stockAdjustment">The StockAdjustment object to create.</param>
-        /// <returns>The created StockAdjustment object.</returns>
-        [HttpPost]
-        [Authorize(Roles = "Admin,Manager")] // Only Admin or Manager roles can create adjustments
-        public async Task<ActionResult<StockAdjustment>> PostStockAdjustment(StockAdjustment stockAdjustment)
-        {
-            var userOrgId = GetUserOrganizationId();
-            stockAdjustment.OrganizationId = userOrgId;
-
-            // Retrieve Component including its InventoryUnit and PurchaseUnit for conversion logic
-            var component = await _context.Components
-                                          .Include(c => c.InventoryUnit)
-                                          .Include(c => c.PurchaseUnit) // Essential for component-specific conversion
-                                          .FirstOrDefaultAsync(c => c.ComponentId == stockAdjustment.ComponentId && c.OrganizationId == userOrgId);
-            if (component == null)
-            {
-                return BadRequest("Component not found or does not belong to your organization.");
-            }
-
-            var adjustmentType = await _context.StockAdjustmentTypes.FindAsync(stockAdjustment.AdjustmentTypeId);
-            if (adjustmentType == null)
-            {
-                return BadRequest("Invalid stock adjustment type.");
-            }
-
-            var adjustmentUnit = await _context.UnitsOfMeasures.FindAsync(stockAdjustment.UnitOfMeasureId);
-            if (adjustmentUnit == null)
-            {
-                return BadRequest("Invalid unit of measure for stock adjustment.");
-            }
-
-            // Calculate quantity in the component's InventoryUnit
-            decimal quantityInInventoryUnit;
             try
             {
-                quantityInInventoryUnit = await ConvertQuantityToInventoryUnit(
-                    stockAdjustment.UnitOfMeasureId,
-                    component.InventoryUnitId,
-                    stockAdjustment.Quantity,
-                    userOrgId,
-                    component // Pass the component for specific conversion factor check
-                );
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest($"Failed to convert quantity: {ex.Message}");
-            }
+                var userOrgId = GetUserOrganizationId();
+                var stockAdjustment = await _stockAdjustmentService.GetStockAdjustmentByIdAsync(id, userOrgId);
 
-            // Update Component's CurrentStockQuantity based on adjustment type
-            if (adjustmentType.Effect == "Increase")
-            {
-                component.CurrentStockQuantity += quantityInInventoryUnit;
-            }
-            else if (adjustmentType.Effect == "Decrease")
-            {
-                // Prevent negative stock levels
-                if (component.CurrentStockQuantity < quantityInInventoryUnit)
-                {
-                    return BadRequest($"Insufficient stock for '{component.ComponentName}'. (Current: {component.CurrentStockQuantity} {component.InventoryUnit?.Abbreviation ?? ""})");
-                }
-                component.CurrentStockQuantity -= quantityInInventoryUnit;
-            }
-
-            stockAdjustment.AdjustmentDate = DateTime.UtcNow;
-            stockAdjustment.CreatedAt = DateTime.UtcNow;
-            stockAdjustment.UpdatedAt = DateTime.UtcNow;
-
-            _context.StockAdjustments.Add(stockAdjustment);
-            _context.Components.Update(component); // Save changes to Component's stock
-            await _context.SaveChangesAsync();
-
-            // Load navigation properties for the returned object
-            await _context.Entry(stockAdjustment).Reference(sa => sa.Component).LoadAsync();
-            await _context.Entry(stockAdjustment).Reference(sa => sa.AdjustmentType).LoadAsync();
-            await _context.Entry(stockAdjustment).Reference(sa => sa.UnitOfMeasure).LoadAsync();
-            await _context.Entry(stockAdjustment).Reference(sa => sa.Organization).LoadAsync();
-
-            return CreatedAtAction(nameof(GetStockAdjustment), new { id = stockAdjustment.AdjustmentId }, stockAdjustment);
-        }
-
-        /// <summary>
-        /// Updates an existing stock adjustment and re-calculates the component's current stock quantity.
-        /// (Note: Updating old adjustments can be complex and potentially lead to inconsistencies.
-        /// It's often recommended to create new adjustments for corrections instead of updating old ones.)
-        /// </summary>
-        /// <param name="id">The ID of the stock adjustment to update.</param>
-        /// <param name="updatedStockAdjustment">The updated StockAdjustment object.</param>
-        /// <returns>NoContent if successful, otherwise BadRequest, NotFound, or Forbid.</returns>
-        [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Manager")] // Only Admin or Manager roles can update adjustments
-        public async Task<IActionResult> PutStockAdjustment(Guid id, StockAdjustment updatedStockAdjustment)
-        {
-            if (id != updatedStockAdjustment.AdjustmentId)
-            {
-                return BadRequest("Stock adjustment ID mismatch.");
-            }
-
-            var userOrgId = GetUserOrganizationId();
-            if (updatedStockAdjustment.OrganizationId != userOrgId)
-            {
-                return Forbid("You do not have permission to modify stock adjustments for other organizations.");
-            }
-
-            // Get original adjustment to revert its effect
-            var originalStockAdjustment = await _context.StockAdjustments
-                                                        .AsNoTracking() // Use AsNoTracking to prevent tracking conflicts
-                                                        .Include(sa => sa.Component)
-                                                            .ThenInclude(c => c!.InventoryUnit) // Eager load InventoryUnit
-                                                        .Include(sa => sa.Component)
-                                                            .ThenInclude(c => c!.PurchaseUnit) // Eager load PurchaseUnit
-                                                        .Include(sa => sa.AdjustmentType)
-                                                        .FirstOrDefaultAsync(sa => sa.AdjustmentId == id && sa.OrganizationId == userOrgId);
-
-            if (originalStockAdjustment == null)
-            {
-                return NotFound();
-            }
-
-            // Get the component to update its stock
-            var component = await _context.Components
-                                          .Include(c => c.InventoryUnit)
-                                          .Include(c => c.PurchaseUnit)
-                                          .FirstOrDefaultAsync(c => c.ComponentId == updatedStockAdjustment.ComponentId && c.OrganizationId == userOrgId);
-            if (component == null)
-            {
-                return BadRequest("Component not found or does not belong to your organization.");
-            }
-
-            var newAdjustmentType = await _context.StockAdjustmentTypes.FindAsync(updatedStockAdjustment.AdjustmentTypeId);
-            if (newAdjustmentType == null)
-            {
-                return BadRequest("Invalid stock adjustment type.");
-            }
-
-            var newAdjustmentUnit = await _context.UnitsOfMeasures.FindAsync(updatedStockAdjustment.UnitOfMeasureId);
-            if (newAdjustmentUnit == null)
-            {
-                return BadRequest("Invalid unit of measure for stock adjustment.");
-            }
-
-            // --- 1. Revert the effect of the original stock adjustment ---
-            decimal originalQuantityInInventoryUnit;
-            try
-            {
-                originalQuantityInInventoryUnit = await ConvertQuantityToInventoryUnit(
-                    originalStockAdjustment.UnitOfMeasureId,
-                    component.InventoryUnitId,
-                    originalStockAdjustment.Quantity,
-                    userOrgId,
-                    component // Pass the component for specific conversion factor check
-                );
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest($"Failed to revert original adjustment quantity: {ex.Message}");
-            }
-
-            if (originalStockAdjustment.AdjustmentType?.Effect == "Increase")
-            {
-                component.CurrentStockQuantity -= originalQuantityInInventoryUnit;
-            }
-            else if (originalStockAdjustment.AdjustmentType?.Effect == "Decrease")
-            {
-                component.CurrentStockQuantity += originalQuantityInInventoryUnit;
-            }
-
-            // --- 2. Apply the effect of the updated stock adjustment ---
-            decimal newQuantityInInventoryUnit;
-            try
-            {
-                newQuantityInInventoryUnit = await ConvertQuantityToInventoryUnit(
-                    updatedStockAdjustment.UnitOfMeasureId,
-                    component.InventoryUnitId,
-                    updatedStockAdjustment.Quantity,
-                    userOrgId,
-                    component // Pass the component for specific conversion factor check
-                );
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest($"Failed to apply new adjustment quantity: {ex.Message}");
-            }
-
-            if (newAdjustmentType.Effect == "Increase")
-            {
-                component.CurrentStockQuantity += newQuantityInInventoryUnit;
-            }
-            else if (newAdjustmentType.Effect == "Decrease")
-            {
-                // Check for sufficient stock *after* reverting original and *before* applying new decrease
-                if (component.CurrentStockQuantity < newQuantityInInventoryUnit)
-                {
-                    return BadRequest($"Insufficient stock for updated decrease adjustment for '{component.ComponentName}'. (Current: {component.CurrentStockQuantity} {component.InventoryUnit?.Abbreviation ?? ""})");
-                }
-                component.CurrentStockQuantity -= newQuantityInInventoryUnit;
-            }
-
-            updatedStockAdjustment.UpdatedAt = DateTime.UtcNow;
-
-            _context.Entry(updatedStockAdjustment).State = EntityState.Modified; // Mark the adjustment as modified
-            _context.Components.Update(component); // Save changes to Component's stock
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!StockAdjustmentExists(id))
+                if (stockAdjustment == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw; // Re-throw other concurrency exceptions
-                }
+                return Ok(stockAdjustment);
             }
-
-            return NoContent(); // 204 No Content on successful update
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving stock adjustment: {ex.Message}" });
+            }
         }
 
         /// <summary>
-        /// Deletes a stock adjustment and reverts its effect on the component's current stock quantity.
+        /// Creates a new stock adjustment and updates the component's current stock quantity. Requires Admin or Manager role.
+        /// </summary>
+        /// <param name="createDto">The StockAdjustment data to create.</param>
+        /// <returns>The created StockAdjustmentResponseDto object.</returns>
+        [HttpPost]
+        [Authorize(Roles = "Admin,Manager")] // Only Admin or Manager roles can create adjustments
+        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(StockAdjustmentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)] // For insufficient stock or business rules
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<StockAdjustmentResponseDto>> CreateStockAdjustment([FromBody] CreateStockAdjustmentDto createDto)
+        {
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                var createdStockAdjustment = await _stockAdjustmentService.CreateStockAdjustmentAsync(createDto, userOrgId);
+                return CreatedAtAction(nameof(GetStockAdjustmentById), new { id = createdStockAdjustment.AdjustmentId }, createdStockAdjustment);
+            }
+            catch (InvalidOperationException ex) // Business rule violations from service
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex) // Invalid input data
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error creating stock adjustment: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Updates an existing stock adjustment and re-calculates the component's current stock quantity. Requires Admin or Manager role.
+        /// Note: Updating old adjustments can be complex and potentially lead to inconsistencies.
+        /// It's often recommended to create new adjustments for corrections instead of updating old ones.
+        /// </summary>
+        /// <param name="id">The ID of the stock adjustment to update.</param>
+        /// <param name="updateDto">The updated StockAdjustment data.</param>
+        /// <returns>The updated StockAdjustmentResponseDto if successful, otherwise BadRequest, NotFound, or Forbid.</returns>
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Manager")] // Only Admin or Manager roles can update adjustments
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(StockAdjustmentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)] // For insufficient stock or business rules
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateStockAdjustment(Guid id, [FromBody] UpdateStockAdjustmentDto updateDto)
+        {
+            if (id != updateDto.AdjustmentId)
+            {
+                return BadRequest("Stock adjustment ID in route must match ID in request body.");
+            }
+
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                var updatedStockAdjustment = await _stockAdjustmentService.UpdateStockAdjustmentAsync(updateDto, userOrgId);
+                if (updatedStockAdjustment == null)
+                {
+                    return NotFound();
+                }
+                return Ok(updatedStockAdjustment);
+            }
+            catch (InvalidOperationException ex) // Business rule violations from service
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex) // Invalid input data
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error updating stock adjustment: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a stock adjustment and reverts its effect on the component's current stock quantity. Requires Admin or Manager role.
         /// </summary>
         /// <param name="id">The ID of the stock adjustment to delete.</param>
         /// <returns>NoContent if successful, otherwise NotFound or BadRequest.</returns>
         [HttpDelete("{id}")]
         [Authorize(Roles = "Admin,Manager")] // Only Admin or Manager roles can delete adjustments
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> DeleteStockAdjustment(Guid id)
         {
-            var userOrgId = GetUserOrganizationId();
-            var stockAdjustment = await _context.StockAdjustments
-                                        .Include(sa => sa.Component)
-                                            .ThenInclude(c => c!.InventoryUnit) // Eager load InventoryUnit
-                                        .Include(sa => sa.Component)
-                                            .ThenInclude(c => c!.PurchaseUnit) // Eager load PurchaseUnit
-                                        .Include(sa => sa.AdjustmentType)
-                                        .FirstOrDefaultAsync(sa => sa.AdjustmentId == id && sa.OrganizationId == userOrgId);
-            if (stockAdjustment == null)
+            try
             {
-                return NotFound();
+                var userOrgId = GetUserOrganizationId();
+                var deleted = await _stockAdjustmentService.DeleteStockAdjustmentAsync(id, userOrgId);
+                if (!deleted)
+                {
+                    return NotFound();
+                }
+                return NoContent();
             }
-
-            // Revert CurrentStockQuantity in Component when deleting StockAdjustment
-            if (stockAdjustment.Component != null && stockAdjustment.AdjustmentType != null)
+            catch (InvalidOperationException ex) // Business rule violation (e.g., cannot revert due to insufficient stock)
             {
-                decimal quantityInInventoryUnitToRevert;
-                try
-                {
-                    quantityInInventoryUnitToRevert = await ConvertQuantityToInventoryUnit(
-                        stockAdjustment.UnitOfMeasureId,
-                        stockAdjustment.Component.InventoryUnitId,
-                        stockAdjustment.Quantity,
-                        userOrgId,
-                        stockAdjustment.Component // Pass the component for specific conversion factor check
-                    );
-                }
-                catch (InvalidOperationException ex)
-                {
-                    return BadRequest($"Failed to revert stock due to conversion issue: {ex.Message}");
-                }
-
-                if (stockAdjustment.AdjustmentType.Effect == "Increase")
-                {
-                    stockAdjustment.Component.CurrentStockQuantity -= quantityInInventoryUnitToRevert; // Revert: If it increased, decrease
-                }
-                else if (stockAdjustment.AdjustmentType.Effect == "Decrease")
-                {
-                    stockAdjustment.Component.CurrentStockQuantity += quantityInInventoryUnitToRevert; // Revert: If it decreased, increase
-                }
-                _context.Components.Update(stockAdjustment.Component); // Save changes to Component's stock
+                return BadRequest(ex.Message);
             }
-
-            _context.StockAdjustments.Remove(stockAdjustment);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        /// <summary>
-        /// Checks if a stock adjustment exists for the current organization.
-        /// </summary>
-        /// <param name="id">The ID of the stock adjustment.</param>
-        /// <returns>True if the stock adjustment exists, otherwise False.</returns>
-        private bool StockAdjustmentExists(Guid id)
-        {
-            var userOrgId = GetUserOrganizationId();
-            return _context.StockAdjustments.Any(e => e.AdjustmentId == id && e.OrganizationId == userOrgId);
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error deleting stock adjustment: {ex.Message}" });
+            }
         }
 
         // --- API Endpoint for retrieving current stock balances ---
@@ -460,27 +259,29 @@ namespace CRAFTHER.Backend.Controllers
         /// </summary>
         /// <returns>A list of CurrentStockBalanceDto objects.</returns>
         [HttpGet("CurrentBalances")]
-        public async Task<ActionResult<IEnumerable<CurrentStockBalanceDtoxx>>> GetCurrentStockBalances()
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<CurrentStockBalanceDto>))]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<CurrentStockBalanceDto>>> GetCurrentStockBalances()
         {
-            var userOrgId = GetUserOrganizationId();
-
-            var stockBalances = await _context.Components
-                                      .Where(c => c.OrganizationId == userOrgId)
-                                      .Include(c => c.InventoryUnit) // Include InventoryUnit to get its Name and Symbol
-                                      .Select(c => new CurrentStockBalanceDtoxx
-                                      {
-                                          ComponentId = c.ComponentId,
-                                          ComponentName = c.ComponentName,
-                                          ComponentSKU = c.ComponentCode, // Use ComponentCode as SKU
-                                          CurrentQuantity = c.CurrentStockQuantity,
-                                          UnitOfMeasureId = c.InventoryUnitId,
-                                          UnitOfMeasureName = c.InventoryUnit != null ? c.InventoryUnit.UnitName : "N/A",
-                                          UnitOfMeasureSymbol = c.InventoryUnit != null ? c.InventoryUnit.Abbreviation : "N/A"
-                                      })
-                                      .OrderBy(dto => dto.ComponentName)
-                                      .ToListAsync();
-
-            return Ok(stockBalances);
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                // Assuming you have a method in IComponentService or a dedicated StockReportService
+                // to get current stock balances efficiently.
+                // For now, let's assume it's part of IStockAdjustmentService for simplicity,
+                // or you can inject IComponentService directly here.
+                var stockBalances = await _stockAdjustmentService.GetCurrentStockBalancesAsync(userOrgId); // Assuming new method in service
+                return Ok(stockBalances);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving current stock balances: {ex.Message}" });
+            }
         }
     }
 }

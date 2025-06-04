@@ -1,11 +1,10 @@
-﻿using CRAFTHER.Backend.Data;
-using CRAFTHER.Backend.Models;
+﻿// Path: CRAFTHER.Backend/Controllers/UnitConversionController.cs
+using CRAFTHER.Backend.DTOs.UnitConversions;
+using CRAFTHER.Backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security.Claims; // สำหรับ HttpContext.User.FindFirst
 using System.Threading.Tasks;
 
@@ -16,175 +15,240 @@ namespace CRAFTHER.Backend.Controllers
     [Authorize] // ต้องมีการ Login ถึงจะเข้าถึงได้
     public class UnitConversionController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IUnitConversionService _unitConversionService;
 
-        public UnitConversionController(ApplicationDbContext context)
+        public UnitConversionController(IUnitConversionService unitConversionService)
         {
-            _context = context;
+            _unitConversionService = unitConversionService;
         }
 
         // Helper method เพื่อดึง OrganizationId ของผู้ใช้ที่ Login อยู่
         private Guid GetUserOrganizationId()
         {
-            var orgIdClaim = HttpContext.User.FindFirst("OrganizationId");
-            if (orgIdClaim == null || !Guid.TryParse(orgIdClaim.Value, out Guid orgId))
+            var orgIdClaim = User.FindFirst("OrganizationId")?.Value; // Access User from ControllerBase
+            if (string.IsNullOrEmpty(orgIdClaim) || !Guid.TryParse(orgIdClaim, out Guid orgId))
             {
-                throw new InvalidOperationException("Organization ID not found in user claims.");
+                throw new InvalidOperationException("Organization ID claim not found or invalid.");
             }
             return orgId;
         }
 
         // GET: api/UnitConversion - ดึงรายการการแปลงหน่วยทั้งหมดสำหรับ Organization ของผู้ใช้
+        /// <summary>
+        /// Retrieves all unit conversions for the authenticated user's organization.
+        /// </summary>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<UnitConversion>>> GetUnitConversions()
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<UnitConversionResponseDto>))]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<UnitConversionResponseDto>>> GetAllUnitConversions()
         {
-            var userOrgId = GetUserOrganizationId();
-            return await _context.UnitConversions
-                                 .Where(uc => uc.OrganizationId == userOrgId)
-                                 .Include(uc => uc.FromUnit)
-                                 .Include(uc => uc.ToUnit)
-                                 .ToListAsync();
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                var conversions = await _unitConversionService.GetAllUnitConversionsAsync(userOrgId);
+                return Ok(conversions);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message }); // เช่น OrganizationId ไม่ถูกต้อง
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving unit conversions: {ex.Message}" });
+            }
         }
 
         // GET: api/UnitConversion/5 - ดึงการแปลงหน่วยตาม ID
+        /// <summary>
+        /// Retrieves a specific unit conversion by its ID for the authenticated user's organization.
+        /// </summary>
+        /// <param name="id">The ID of the unit conversion.</param>
         [HttpGet("{id}")]
-        public async Task<ActionResult<UnitConversion>> GetUnitConversion(Guid id)
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UnitConversionResponseDto))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<UnitConversionResponseDto>> GetUnitConversionById(Guid id)
         {
-            var userOrgId = GetUserOrganizationId();
-            var unitConversion = await _context.UnitConversions
-                                               .Include(uc => uc.FromUnit)
-                                               .Include(uc => uc.ToUnit)
-                                               .FirstOrDefaultAsync(uc => uc.ConversionId == id && uc.OrganizationId == userOrgId);
-
-            if (unitConversion == null)
-            {
-                return NotFound();
-            }
-
-            return unitConversion;
-        }
-
-        // POST: api/UnitConversion - สร้างการแปลงหน่วยใหม่
-        [HttpPost]
-        [Authorize(Roles = "Admin,Manager")]
-        public async Task<ActionResult<UnitConversion>> PostUnitConversion(UnitConversion unitConversion)
-        {
-            var userOrgId = GetUserOrganizationId();
-            unitConversion.OrganizationId = userOrgId; // กำหนด OrganizationId จากผู้ใช้ที่ Login
-
-            // *** ลบการตรวจสอบ OrganizationId ของ FromUnit และ ToUnit ***
-            // ตรวจสอบว่า FromUnitId และ ToUnitId มีอยู่จริงในระบบหรือไม่ (ไม่สน OrganizationId แล้ว)
-            var fromUnitExists = await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == unitConversion.FromUnitId);
-            var toUnitExists = await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == unitConversion.ToUnitId);
-
-            if (!fromUnitExists || !toUnitExists)
-            {
-                return BadRequest("หน่วยต้นทางหรือหน่วยปลายทางไม่ถูกต้อง.");
-            }
-
-            // ตรวจสอบว่ามีการแปลงหน่วยเดียวกันอยู่แล้วหรือไม่สำหรับ Organization ของผู้ใช้
-            var existingConversion = await _context.UnitConversions
-                .AnyAsync(uc => uc.OrganizationId == userOrgId && // ยังคงผูกกับ Organization ของผู้ใช้
-                                (uc.FromUnitId == unitConversion.FromUnitId && uc.ToUnitId == unitConversion.ToUnitId));
-            if (existingConversion)
-            {
-                return Conflict("มีการแปลงหน่วยนี้อยู่แล้วในองค์กรของคุณ.");
-            }
-
-            unitConversion.CreatedAt = DateTime.UtcNow;
-            unitConversion.UpdatedAt = DateTime.UtcNow;
-
-            _context.UnitConversions.Add(unitConversion);
-            await _context.SaveChangesAsync();
-
-            await _context.Entry(unitConversion).Reference(uc => uc.FromUnit).LoadAsync();
-            await _context.Entry(unitConversion).Reference(uc => uc.ToUnit).LoadAsync();
-            await _context.Entry(unitConversion).Reference(uc => uc.Organization).LoadAsync();
-
-            return CreatedAtAction(nameof(GetUnitConversion), new { id = unitConversion.ConversionId }, unitConversion);
-        }
-
-        // PUT: api/UnitConversion/5 - อัปเดตการแปลงหน่วย
-        [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Manager")]
-        public async Task<IActionResult> PutUnitConversion(Guid id, UnitConversion unitConversion)
-        {
-            if (id != unitConversion.ConversionId)
-            {
-                return BadRequest("รหัสการแปลงหน่วยไม่ตรงกัน.");
-            }
-
-            var userOrgId = GetUserOrganizationId();
-            // ตรวจสอบว่าเป็นของ Organization เดียวกัน
-            if (unitConversion.OrganizationId != userOrgId)
-            {
-                return Forbid("คุณไม่มีสิทธิ์ในการแก้ไขการแปลงหน่วยขององค์กรอื่น.");
-            }
-
-            // *** ลบการตรวจสอบ OrganizationId ของ FromUnit และ ToUnit ***
-            // ตรวจสอบว่า FromUnitId และ ToUnitId มีอยู่จริงในระบบหรือไม่ (ไม่สน OrganizationId แล้ว)
-            var fromUnitExists = await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == unitConversion.FromUnitId);
-            var toUnitExists = await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == unitConversion.ToUnitId);
-
-            if (!fromUnitExists || !toUnitExists)
-            {
-                return BadRequest("หน่วยต้นทางหรือหน่วยปลายทางไม่ถูกต้อง.");
-            }
-
-            // ตรวจสอบว่ามีการแปลงหน่วยเดียวกันอยู่แล้วหรือไม่ (ยกเว้นตัวมันเอง) สำหรับ Organization ของผู้ใช้
-            var existingConversion = await _context.UnitConversions
-                .AnyAsync(uc => uc.ConversionId != id && uc.OrganizationId == userOrgId && // ยังคงผูกกับ Organization ของผู้ใช้
-                                (uc.FromUnitId == unitConversion.FromUnitId && uc.ToUnitId == unitConversion.ToUnitId));
-            if (existingConversion)
-            {
-                return Conflict("มีการแปลงหน่วยนี้อยู่แล้วในองค์กรของคุณ.");
-            }
-
-            unitConversion.UpdatedAt = DateTime.UtcNow;
-
-            _context.Entry(unitConversion).State = EntityState.Modified;
-
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UnitConversionExists(id))
+                var userOrgId = GetUserOrganizationId();
+                var unitConversion = await _unitConversionService.GetUnitConversionByIdAsync(id, userOrgId);
+
+                if (unitConversion == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
+                return Ok(unitConversion);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving unit conversion: {ex.Message}" });
+            }
+        }
+
+        // POST: api/UnitConversion - สร้างการแปลงหน่วยใหม่
+        /// <summary>
+        /// Creates a new unit conversion. Requires Admin or Manager role.
+        /// </summary>
+        /// <param name="createDto">The unit conversion data.</param>
+        [HttpPost]
+        [Authorize(Roles = "Admin,Manager")]
+        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(UnitConversionResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<UnitConversionResponseDto>> CreateUnitConversion([FromBody] CreateUnitConversionDto createDto)
+        {
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                // OrganizationId ถูกส่งไปยัง Service จาก Controller เพื่อให้ Service ใช้ในการตรวจสอบ
+                var createdUnitConversion = await _unitConversionService.CreateUnitConversionAsync(createDto, userOrgId);
+                return CreatedAtAction(nameof(GetUnitConversionById), new { id = createdUnitConversion.UnitConversionId }, createdUnitConversion);
+            }
+            catch (InvalidOperationException ex) // Business rule violations like invalid unit, duplicate conversion
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex) // Invalid input data from DTO validation
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error creating unit conversion: {ex.Message}" });
+            }
+        }
+
+        // PUT: api/UnitConversion/5 - อัปเดตการแปลงหน่วย
+        /// <summary>
+        /// Updates an existing unit conversion. Requires Admin or Manager role.
+        /// </summary>
+        /// <param name="id">The ID of the unit conversion to update.</param>
+        /// <param name="updateDto">The updated unit conversion data.</param>
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Manager")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(UnitConversionResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> UpdateUnitConversion(Guid id, [FromBody] UpdateUnitConversionDto updateDto)
+        {
+            if (id != updateDto.UnitConversionId)
+            {
+                return BadRequest("Conversion ID in route must match Conversion ID in request body.");
             }
 
-            return NoContent();
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                // OrganizationId ถูกส่งไปยัง Service จาก Controller เพื่อให้ Service ใช้ในการตรวจสอบสิทธิ์
+                var updatedUnitConversion = await _unitConversionService.UpdateUnitConversionAsync(updateDto, userOrgId);
+                if (updatedUnitConversion == null)
+                {
+                    return NotFound();
+                }
+                return Ok(updatedUnitConversion);
+            }
+            catch (InvalidOperationException ex) // Business rule violations, e.g., duplicate, invalid unit
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex) // Invalid input data
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error updating unit conversion: {ex.Message}" });
+            }
         }
 
         // DELETE: api/UnitConversion/5 - ลบการแปลงหน่วย
+        /// <summary>
+        /// Deletes a unit conversion. Requires Admin or Manager role.
+        /// </summary>
+        /// <param name="id">The ID of the unit conversion to delete.</param>
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Manager")] // เฉพาะ Admin หรือ Manager เท่านั้นที่ลบได้
+        [Authorize(Roles = "Admin,Manager")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> DeleteUnitConversion(Guid id)
         {
-            var userOrgId = GetUserOrganizationId();
-            var unitConversion = await _context.UnitConversions.FirstOrDefaultAsync(uc => uc.ConversionId == id && uc.OrganizationId == userOrgId);
-            if (unitConversion == null)
+            try
             {
-                return NotFound();
+                var userOrgId = GetUserOrganizationId();
+                var deleted = await _unitConversionService.DeleteUnitConversionAsync(id, userOrgId);
+                if (!deleted)
+                {
+                    return NotFound();
+                }
+                return NoContent(); // 204 No Content
             }
-
-            _context.UnitConversions.Remove(unitConversion);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            catch (InvalidOperationException ex) // Business rule violation (e.g., in use)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error deleting unit conversion: {ex.Message}" });
+            }
         }
 
-        private bool UnitConversionExists(Guid id)
+        /// <summary>
+        /// Gets the conversion factor between two specified units for the current user's organization.
+        /// </summary>
+        /// <param name="fromUnitId">The ID of the source unit.</param>
+        /// <param name="toUnitId">The ID of the target unit.</param>
+        /// <returns>The conversion factor as a decimal, or NotFound if no conversion path is found.</returns>
+        [HttpGet("factor")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(decimal))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<decimal>> GetConversionFactor([FromQuery] Guid fromUnitId, [FromQuery] Guid toUnitId)
         {
-            var userOrgId = GetUserOrganizationId();
-            return _context.UnitConversions.Any(e => e.ConversionId == id && e.OrganizationId == userOrgId);
+            if (fromUnitId == Guid.Empty || toUnitId == Guid.Empty)
+            {
+                return BadRequest("FromUnitId and ToUnitId are required.");
+            }
+
+            try
+            {
+                var userOrgId = GetUserOrganizationId();
+                var factor = await _unitConversionService.GetConversionFactorAsync(fromUnitId, toUnitId, userOrgId);
+
+                if (!factor.HasValue)
+                {
+                    return NotFound($"No conversion path found from unit '{fromUnitId}' to '{toUnitId}' for your organization.");
+                }
+
+                return Ok(factor.Value);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error getting conversion factor: {ex.Message}" });
+            }
         }
     }
 }

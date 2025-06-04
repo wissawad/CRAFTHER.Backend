@@ -88,6 +88,9 @@ builder.Services.AddScoped<IComponentService, ComponentService>();
 builder.Services.AddScoped<IBOMItemService, BOMItemService>();
 builder.Services.AddScoped<IUnitGroupService, UnitGroupService>();
 builder.Services.AddScoped<IUnitOfMeasureService, UnitOfMeasureService>();
+builder.Services.AddScoped<IUnitConversionService, UnitConversionService>();
+builder.Services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
+builder.Services.AddScoped<IItemCategoryService, ItemCategoryService>();
 
 var app = builder.Build();
 

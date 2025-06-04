@@ -28,6 +28,8 @@ namespace CRAFTHER.Backend.Models
         [Column(TypeName = "decimal(18, 8)")] // ใช้ Precision สูงขึ้นสำหรับอัตราส่วน
         public decimal ConversionFactor { get; set; } // อัตราส่วนการแปลง เช่น 1 kg = 1000 g, factor = 1000
 
+        [MaxLength(255)] // เพิ่ม Remarks เข้าไป
+        public string? Remarks { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
