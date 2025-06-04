@@ -33,7 +33,7 @@ namespace CRAFTHER.Backend.Models
 
         [Required]
         [Column(TypeName = "decimal(18, 6)")]
-        public decimal ConversionFactorToInventoryUnit { get; set; }
+        public decimal PurchaseToInventoryConversionFactor { get; set; }
 
         [Required]
         public Guid InventoryUnitId { get; set; }

@@ -60,11 +60,11 @@ namespace CRAFTHER.Backend.Controllers
             // 1. Try component-specific conversion first (PurchaseUnit to InventoryUnit)
             if (component != null && fromUnitId == component.PurchaseUnitId && toUnitId == component.InventoryUnitId)
             {
-                if (component.ConversionFactorToInventoryUnit == 0)
+                if (component.PurchaseToInventoryConversionFactor == 0)
                 {
                     throw new InvalidOperationException($"Conversion factor from purchase unit '{component.PurchaseUnit?.Abbreviation}' to inventory unit '{component.InventoryUnit?.Abbreviation}' for component '{component.ComponentName}' is zero, which is invalid.");
                 }
-                return quantity * component.ConversionFactorToInventoryUnit;
+                return quantity * component.PurchaseToInventoryConversionFactor;
             }
 
             // 2. Fallback to general UnitConversion table
@@ -460,14 +460,14 @@ namespace CRAFTHER.Backend.Controllers
         /// </summary>
         /// <returns>A list of CurrentStockBalanceDto objects.</returns>
         [HttpGet("CurrentBalances")]
-        public async Task<ActionResult<IEnumerable<CurrentStockBalanceDto>>> GetCurrentStockBalances()
+        public async Task<ActionResult<IEnumerable<CurrentStockBalanceDtoxx>>> GetCurrentStockBalances()
         {
             var userOrgId = GetUserOrganizationId();
 
             var stockBalances = await _context.Components
                                       .Where(c => c.OrganizationId == userOrgId)
                                       .Include(c => c.InventoryUnit) // Include InventoryUnit to get its Name and Symbol
-                                      .Select(c => new CurrentStockBalanceDto
+                                      .Select(c => new CurrentStockBalanceDtoxx
                                       {
                                           ComponentId = c.ComponentId,
                                           ComponentName = c.ComponentName,

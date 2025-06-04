@@ -33,6 +33,14 @@ namespace CRAFTHER.Backend.Models
         [ForeignKey("UnitOfMeasureId")]
         public UnitOfMeasure? UnitOfMeasure { get; set; }
 
+        [Required] // เพิ่ม field นี้
+        [Column(TypeName = "decimal(18, 4)")]
+        public decimal QuantityBeforeAdjustment { get; set; } // ยอดสต็อกของ Component ใน InventoryUnit ก่อนการปรับปรุง
+
+        [Required] // เพิ่ม field นี้
+        [Column(TypeName = "decimal(18, 4)")]
+        public decimal QuantityAfterAdjustment { get; set; } // ยอดสต็อกของ Component ใน InventoryUnit หลังการปรับปรุง
+
         public string? Notes { get; set; } // หมายเหตุการปรับปรุง
 
         public DateTime AdjustmentDate { get; set; } = DateTime.UtcNow; // วันที่ทำการปรับปรุง

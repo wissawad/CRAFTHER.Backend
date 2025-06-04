@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens; 
 using System.Text;
 using Microsoft.OpenApi.Models;
+using CRAFTHER.Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,6 +82,12 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 });
+
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IComponentService, ComponentService>();
+builder.Services.AddScoped<IBOMItemService, BOMItemService>();
+builder.Services.AddScoped<IUnitGroupService, UnitGroupService>();
+builder.Services.AddScoped<IUnitOfMeasureService, UnitOfMeasureService>();
 
 var app = builder.Build();
 

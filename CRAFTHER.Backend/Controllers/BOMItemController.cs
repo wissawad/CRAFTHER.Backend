@@ -1,258 +1,180 @@
-﻿using CRAFTHER.Backend.Data;
-using CRAFTHER.Backend.Models;
+﻿using CRAFTHER.Backend.DTOs.BOMItems;
+using CRAFTHER.Backend.Services;
+using CRAFTHER.Backend.Models; // For InvalidOperationException if needed
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
+using System.Security.Claims; // For GetOrganizationId()
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace CRAFTHER.Backend.Controllers
 {
-    [Route("api/[controller]")]
+    [Authorize] // Requires authentication for all endpoints in this controller
+    [Route("api/products/{parentProductId}/bomitems")]
     [ApiController]
-    public class BOMItemController : ControllerBase
+    public class BOMItemsController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IBOMItemService _bomItemService;
+        private readonly IProductService _productService; // To verify parent product exists and organization
 
-        public BOMItemController(ApplicationDbContext context)
+        public BOMItemsController(IBOMItemService bomItemService, IProductService productService)
         {
-            _context = context;
+            _bomItemService = bomItemService;
+            _productService = productService;
         }
 
-        // --- HTTP GET: ดึงข้อมูลทั้งหมด ---
-        // GET: api/BOMItem
-        [Authorize(Roles = "Admin,User,Manager")]
+        // Helper to get OrganizationId from JWT token
+        private Guid GetOrganizationId()
+        {
+            var organizationIdClaim = User.FindFirst("organizationId")?.Value;
+            if (string.IsNullOrEmpty(organizationIdClaim) || !Guid.TryParse(organizationIdClaim, out var organizationId))
+            {
+                throw new InvalidOperationException("Organization ID claim not found or invalid.");
+            }
+            return organizationId;
+        }
+
+        // GET: api/products/{parentProductId}/bomitems
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<BOMItem>>> GetBOMItems()
+        public async Task<ActionResult<IEnumerable<BOMItemResponseDto>>> GetAllBOMItemsByParentProductId(Guid parentProductId)
         {
-            // Eager loading: โหลด ParentProduct และ UsageUnit
-            // เนื่องจาก ComponentReferenceId ไม่มี Navigation Property โดยตรง, จะไม่สามารถ Include Component/SubProduct ได้ที่นี่
-            // หากต้องการข้อมูล Component/SubProduct เต็มๆ ใน Response ต้องใช้ DTO หรือ Query แยก
-            return await _context.BOMItems
-                                 .Include(b => b.ParentProduct) // โหลด Product หลัก
-                                 .Include(b => b.UsageUnit)     // โหลดหน่วยวัด
-                                 .ToListAsync();
+            var organizationId = GetOrganizationId();
+
+            // Optional: Verify Parent Product exists and belongs to the organization (redundant with service logic but good for early exit)
+            var parentProduct = await _productService.GetProductByIdAsync(parentProductId, organizationId);
+            if (parentProduct == null)
+            {
+                return NotFound($"Parent Product with ID '{parentProductId}' not found or does not belong to your organization.");
+            }
+
+            var bomItems = await _bomItemService.GetAllBOMItemsByParentProductIdAsync(parentProductId, organizationId);
+            return Ok(bomItems);
         }
 
-        // --- HTTP GET: ดึงข้อมูลตาม ID ---
-        // GET: api/BOMItem/5
-        [Authorize(Roles = "Admin,User,Manager")]
-        [HttpGet("{id}")]
-        public async Task<ActionResult<BOMItem>> GetBOMItem(Guid id)
+        // GET: api/products/{parentProductId}/bomitems/{bomItemId}
+        [HttpGet("{bomItemId}")]
+        public async Task<ActionResult<BOMItemResponseDto>> GetBOMItemById(Guid parentProductId, Guid bomItemId)
         {
-            // Eager loading: โหลด ParentProduct และ UsageUnit
-            var bomItem = await _context.BOMItems
-                                        .Include(b => b.ParentProduct)
-                                        .Include(b => b.UsageUnit)
-                                        .FirstOrDefaultAsync(b => b.BOMItemId == id);
+            var organizationId = GetOrganizationId();
+
+            // Optional: Verify Parent Product exists and belongs to the organization
+            var parentProduct = await _productService.GetProductByIdAsync(parentProductId, organizationId);
+            if (parentProduct == null)
+            {
+                return NotFound($"Parent Product with ID '{parentProductId}' not found or does not belong to your organization.");
+            }
+
+            var bomItem = await _bomItemService.GetBOMItemByIdAsync(bomItemId, parentProductId, organizationId);
 
             if (bomItem == null)
             {
                 return NotFound();
             }
-
-            // เนื่องจาก ComponentReferenceId ไม่มี Navigation Property โดยตรง (เช่น Component หรือ SubProduct object ใน BOMItem model)
-            // เราจึงไม่สามารถใช้ .Include() หรือ .Reference().LoadAsync() เพื่อโหลด object ของ Component หรือ SubProduct ที่นี่ได้โดยตรง
-            // หากต้องการข้อมูลของ Component/SubProduct เต็มๆ ใน Response ต้อง Query เพิ่มเติมแล้วใช้ Data Transfer Object (DTO)
-            // เพื่อรวมข้อมูล:
-            /*
-            if (bomItem.ComponentType.Equals("COMPONENT", StringComparison.OrdinalIgnoreCase))
-            {
-                var componentDetail = await _context.Components.FindAsync(bomItem.ComponentReferenceId);
-                // ในอนาคต อาจจะต้องสร้าง BOMItemDto และใส่ componentDetail เข้าไปใน DTO
-            }
-            else if (bomItem.ComponentType.Equals("PRODUCT", StringComparison.OrdinalIgnoreCase))
-            {
-                var subProductDetail = await _context.Products.FindAsync(bomItem.ComponentReferenceId);
-                // ในอนาคต อาจจะต้องสร้าง BOMItemDto และใส่ subProductDetail เข้าไปใน DTO
-            }
-            */
-
-            return bomItem;
+            return Ok(bomItem);
         }
 
-        // --- HTTP POST: สร้างข้อมูลใหม่ ---
-        // POST: api/BOMItem
-        [Authorize(Roles = "Admin,Manager")]
+        // POST: api/products/{parentProductId}/bomitems
         [HttpPost]
-        public async Task<ActionResult<BOMItem>> PostBOMItem(BOMItem bomItem)
+        public async Task<ActionResult<BOMItemResponseDto>> CreateBOMItem(Guid parentProductId, [FromBody] CreateBOMItemDto createBOMItemDto)
         {
-            // Validation: ต้องมี ParentProductId ที่ถูกต้อง
-            if (!await _context.Products.AnyAsync(p => p.ProductId == bomItem.ParentProductId))
+            var organizationId = GetOrganizationId();
+
+            // Ensure the ParentProductId in the DTO matches the route parameter
+            if (parentProductId != createBOMItemDto.ParentProductId)
             {
-                return BadRequest("Invalid ParentProductId.");
+                return BadRequest("ParentProductId in route must match ParentProductId in request body.");
             }
 
-            // Validation: ต้องมี UsageUnitId ที่ถูกต้อง
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == bomItem.UsageUnitId))
+            // Optional: Verify Parent Product exists and belongs to the organization before passing to service
+            var parentProduct = await _productService.GetProductByIdAsync(parentProductId, organizationId);
+            if (parentProduct == null)
             {
-                return BadRequest("Invalid UsageUnitId.");
+                return NotFound($"Parent Product with ID '{parentProductId}' not found or does not belong to your organization.");
             }
 
-            // Validation: ตรวจสอบ ComponentType และ ComponentReferenceId
-            if (string.IsNullOrWhiteSpace(bomItem.ComponentType))
-            {
-                return BadRequest("ComponentType is required.");
-            }
-
-            bomItem.ComponentType = bomItem.ComponentType.ToUpperInvariant(); // ทำให้เป็นตัวพิมพ์ใหญ่เพื่อความสอดคล้อง
-
-            if (bomItem.ComponentType == "COMPONENT")
-            {
-                if (!await _context.Components.AnyAsync(c => c.ComponentId == bomItem.ComponentReferenceId))
-                {
-                    return BadRequest("Invalid ComponentReferenceId for ComponentType 'COMPONENT'.");
-                }
-            }
-            else if (bomItem.ComponentType == "PRODUCT")
-            {
-                if (!await _context.Products.AnyAsync(p => p.ProductId == bomItem.ComponentReferenceId))
-                {
-                    return BadRequest("Invalid ComponentReferenceId for ComponentType 'PRODUCT'.");
-                }
-                // Validation: ป้องกัน Circular Dependency (Product A มี Product A เป็นส่วนประกอบย่อย)
-                if (bomItem.ParentProductId == bomItem.ComponentReferenceId)
-                {
-                    return BadRequest("A product cannot be a sub-product of itself.");
-                }
-                // Future improvement: Add more complex circular dependency check (e.g., A -> B, B -> C, C -> A)
-            }
-            else
-            {
-                return BadRequest("Invalid ComponentType. Must be 'COMPONENT' or 'PRODUCT'.");
-            }
-
-            // ตั้งค่า CreatedAt และ UpdatedAt
-            bomItem.CreatedAt = DateTime.UtcNow;
-            bomItem.UpdatedAt = DateTime.UtcNow;
-
-            _context.BOMItems.Add(bomItem);
-            await _context.SaveChangesAsync();
-
-            // โหลด Navigation Properties เพื่อให้ Object ที่คืนค่ากลับไปมีข้อมูลสมบูรณ์
-            // สามารถโหลด ParentProduct และ UsageUnit ได้ เพราะมี Navigation Property ตรงๆ
-            await _context.Entry(bomItem).Reference(b => b.ParentProduct).LoadAsync();
-            await _context.Entry(bomItem).Reference(b => b.UsageUnit).LoadAsync();
-
-            // เนื่องจาก ComponentReferenceId ไม่มี Navigation Property ที่เชื่อมโยงโดยตรง
-            // เราไม่สามารถใช้ .Reference().LoadAsync() กับมันได้
-            // Response จะมีแค่ ComponentReferenceId (GUID) แต่ไม่มี Object ของ Component/Product นั้นๆ
-            // หากต้องการข้อมูล Component/Product เต็มๆ ใน Response ต้องใช้ DTO และ Query แยก
-            /*
-            if (bomItem.ComponentType == "COMPONENT") {
-                var componentDetail = await _context.Components.FindAsync(bomItem.ComponentReferenceId);
-                // ต้องรวมข้อมูลนี้เข้ากับ DTO ที่จะส่งกลับ
-            } else if (bomItem.ComponentType == "PRODUCT") {
-                var subProductDetail = await _context.Products.FindAsync(bomItem.ComponentReferenceId);
-                // ต้องรวมข้อมูลนี้เข้ากับ DTO ที่จะส่งกลับ
-            }
-            */
-
-            return CreatedAtAction(nameof(GetBOMItem), new { id = bomItem.BOMItemId }, bomItem);
-        }
-
-        // --- HTTP PUT: อัปเดตข้อมูล ---
-        // PUT: api/BOMItem/5
-        [Authorize(Roles = "Admin,Manager")]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutBOMItem(Guid id, BOMItem bomItem)
-        {
-            if (id != bomItem.BOMItemId)
-            {
-                return BadRequest("BOMItem ID mismatch.");
-            }
-
-            // Validation: ต้องมี ParentProductId ที่ถูกต้อง
-            if (!await _context.Products.AnyAsync(p => p.ProductId == bomItem.ParentProductId))
-            {
-                return BadRequest("Invalid ParentProductId.");
-            }
-
-            // Validation: ต้องมี UsageUnitId ที่ถูกต้อง
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == bomItem.UsageUnitId))
-            {
-                return BadRequest("Invalid UsageUnitId.");
-            }
-
-            // Validation: ตรวจสอบ ComponentType และ ComponentReferenceId
-            if (string.IsNullOrWhiteSpace(bomItem.ComponentType))
-            {
-                return BadRequest("ComponentType is required.");
-            }
-
-            bomItem.ComponentType = bomItem.ComponentType.ToUpperInvariant(); // ทำให้เป็นตัวพิมพ์ใหญ่เพื่อความสอดคล้อง
-
-            if (bomItem.ComponentType == "COMPONENT")
-            {
-                if (!await _context.Components.AnyAsync(c => c.ComponentId == bomItem.ComponentReferenceId))
-                {
-                    return BadRequest("Invalid ComponentReferenceId for ComponentType 'COMPONENT'.");
-                }
-            }
-            else if (bomItem.ComponentType == "PRODUCT")
-            {
-                if (!await _context.Products.AnyAsync(p => p.ProductId == bomItem.ComponentReferenceId))
-                {
-                    return BadRequest("Invalid ComponentReferenceId for ComponentType 'PRODUCT'.");
-                }
-                // Validation: ป้องกัน Circular Dependency
-                if (bomItem.ParentProductId == bomItem.ComponentReferenceId)
-                {
-                    return BadRequest("A product cannot be a sub-product of itself.");
-                }
-            }
-            else
-            {
-                return BadRequest("Invalid ComponentType. Must be 'COMPONENT' or 'PRODUCT'.");
-            }
-
-            bomItem.UpdatedAt = DateTime.UtcNow;
-
-            _context.Entry(bomItem).State = EntityState.Modified;
+            // Temporarily set OrganizationId in DTO for service-side validation
+            // In a real app, ensure this comes from the authenticated user's claims
+            // This is crucial for security.
+            // For now, we'll ensure the organizationId is set correctly via the parent product's organization.
+            // We use the organizationId from the authenticated user.
+            // No direct organizationId in CreateBOMItemDto for now, as it's implicitly tied to ParentProduct.
 
             try
             {
-                await _context.SaveChangesAsync();
+                var createdBOMItem = await _bomItemService.CreateBOMItemAsync(createBOMItemDto);
+                return CreatedAtAction(nameof(GetBOMItemById), new { parentProductId = createdBOMItem.ParentProductId, bomItemId = createdBOMItem.BOMItemId }, createdBOMItem);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (InvalidOperationException ex)
             {
-                if (!BOMItemExists(id))
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // PUT: api/products/{parentProductId}/bomitems/{bomItemId}
+        [HttpPut("{bomItemId}")]
+        public async Task<ActionResult<BOMItemResponseDto>> UpdateBOMItem(Guid parentProductId, Guid bomItemId, [FromBody] UpdateBOMItemDto updateBOMItemDto)
+        {
+            var organizationId = GetOrganizationId();
+
+            // Ensure IDs in DTO match route parameters
+            if (bomItemId != updateBOMItemDto.BOMItemId)
+            {
+                return BadRequest("BOMItemId in route must match BOMItemId in request body.");
+            }
+            if (parentProductId != updateBOMItemDto.ParentProductId)
+            {
+                return BadRequest("ParentProductId in route must match ParentProductId in request body.");
+            }
+
+            // Optional: Verify Parent Product exists and belongs to the organization
+            var parentProduct = await _productService.GetProductByIdAsync(parentProductId, organizationId);
+            if (parentProduct == null)
+            {
+                return NotFound($"Parent Product with ID '{parentProductId}' not found or does not belong to your organization.");
+            }
+
+            try
+            {
+                var updatedBOMItem = await _bomItemService.UpdateBOMItemAsync(updateBOMItemDto);
+                if (updatedBOMItem == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
+                return Ok(updatedBOMItem);
             }
-
-            return NoContent();
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
-        // --- HTTP DELETE: ลบข้อมูล ---
-        // DELETE: api/BOMItem/5
-        [Authorize(Roles = "Admin,Manager")]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteBOMItem(Guid id)
+        // DELETE: api/products/{parentProductId}/bomitems/{bomItemId}
+        [HttpDelete("{bomItemId}")]
+        public async Task<IActionResult> DeleteBOMItem(Guid parentProductId, Guid bomItemId)
         {
-            var bomItem = await _context.BOMItems.FindAsync(id);
-            if (bomItem == null)
+            var organizationId = GetOrganizationId();
+
+            // Optional: Verify Parent Product exists and belongs to the organization
+            var parentProduct = await _productService.GetProductByIdAsync(parentProductId, organizationId);
+            if (parentProduct == null)
+            {
+                return NotFound($"Parent Product with ID '{parentProductId}' not found or does not belong to your organization.");
+            }
+
+            var deleted = await _bomItemService.DeleteBOMItemAsync(bomItemId, parentProductId, organizationId);
+            if (!deleted)
             {
                 return NotFound();
             }
-
-            _context.BOMItems.Remove(bomItem);
-            await _context.SaveChangesAsync();
-
             return NoContent();
-        }
-
-        // --- Helper Method: ตรวจสอบว่า BOMItem มีอยู่หรือไม่ ---
-        private bool BOMItemExists(Guid id)
-        {
-            return _context.BOMItems.Any(e => e.BOMItemId == id);
         }
     }
 }

@@ -12,7 +12,9 @@ namespace CRAFTHER.Backend.Models
         public string UnitGroupName { get; set; } = string.Empty; // ชื่อกลุ่มหน่วย (เช่น "ของเหลว", "ของแข็ง", "นับชิ้น")
 
         [MaxLength(255)]
-        public string? Description { get; set; } // คำอธิบายกลุ่มหน่วย
+        public string? Description { get; set; }
+
+        public ICollection<UnitOfMeasure>? UnitsOfMeasure { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

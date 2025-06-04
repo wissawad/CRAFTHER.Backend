@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema; // Ensure this is present fo
 
 namespace CRAFTHER.Backend.DTOs
 {
-    public class CurrentStockBalanceDto
+    public class CurrentStockBalanceDtoxx
     {
         public Guid ComponentId { get; set; }
         public string ComponentName { get; set; } = string.Empty;

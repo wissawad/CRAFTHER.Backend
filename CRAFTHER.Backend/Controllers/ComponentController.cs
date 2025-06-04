@@ -1,169 +1,183 @@
-﻿using CRAFTHER.Backend.Data;
-using CRAFTHER.Backend.Models;
+﻿using CRAFTHER.Backend.DTOs.Components;
+using CRAFTHER.Backend.DTOs; // For CurrentStockBalanceDto
+using CRAFTHER.Backend.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Security.Claims;
 
 namespace CRAFTHER.Backend.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")] // e.g., /api/Component
+    // [Authorize] // Uncomment if authentication is required for all actions
     public class ComponentController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IComponentService _componentService;
 
-        public ComponentController(ApplicationDbContext context)
+        public ComponentController(IComponentService componentService)
         {
-            _context = context;
+            _componentService = componentService;
         }
 
-        // --- HTTP GET: ดึงข้อมูลทั้งหมด ---
-        // GET: api/Component
-        [Authorize(Roles = "Admin,User,Manager")]
+        // Helper method to get OrganizationId from claims (same as in ProductController)
+        private Guid GetOrganizationId()
+        {
+            // !!! IMPORTANT: REPLACE THIS WITH ACTUAL AUTHENTICATION LOGIC IN PRODUCTION !!!
+            // Example:
+            // var organizationIdClaim = User.FindFirst("organizationId")?.Value;
+            // if (Guid.TryParse(organizationIdClaim, out var orgId))
+            // {
+            //     return orgId;
+            // }
+            return Guid.Parse("YOUR_DEFAULT_ORGANIZATION_ID_HERE"); // <-- REPLACE THIS GUID!
+        }
+
+        /// <summary>
+        /// Gets all components for the authenticated organization.
+        /// </summary>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Component>>> GetComponents()
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(IEnumerable<ComponentResponseDto>))]
+        public async Task<ActionResult<IEnumerable<ComponentResponseDto>>> GetAllComponents()
         {
-            // Eager loading: โหลด PurchaseUnit, InventoryUnit และ Organization
-            return await _context.Components
-                                 .Include(c => c.PurchaseUnit)
-                                 .Include(c => c.InventoryUnit)
-                                 .Include(c => c.Organization)
-                                 .ToListAsync();
+            var organizationId = GetOrganizationId();
+            var components = await _componentService.GetAllComponentsAsync(organizationId);
+            return Ok(components);
         }
 
-        // --- HTTP GET: ดึงข้อมูลตาม ID ---
-        // GET: api/Component/5
-        [Authorize(Roles = "Admin,User,Manager")]
+        /// <summary>
+        /// Gets a component by its ID for the authenticated organization.
+        /// </summary>
+        /// <param name="id">The ID of the component.</param>
         [HttpGet("{id}")]
-        public async Task<ActionResult<Component>> GetComponent(Guid id)
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ComponentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<ComponentResponseDto>> GetComponentById(Guid id)
         {
-            // Eager loading: โหลด PurchaseUnit, InventoryUnit และ Organization
-            var component = await _context.Components
-                                        .Include(c => c.PurchaseUnit)
-                                        .Include(c => c.InventoryUnit)
-                                        .Include(c => c.Organization)
-                                        .FirstOrDefaultAsync(c => c.ComponentId == id);
+            var organizationId = GetOrganizationId();
+            var component = await _componentService.GetComponentByIdAsync(id, organizationId);
 
             if (component == null)
             {
                 return NotFound();
             }
-
-            return component;
+            return Ok(component);
         }
 
-        // --- HTTP POST: สร้างข้อมูลใหม่ ---
-        // POST: api/Component
-        [Authorize(Roles = "Admin,Manager")]
+        /// <summary>
+        /// Creates a new component.
+        /// </summary>
+        /// <param name="createComponentDto">The component data.</param>
         [HttpPost]
-        public async Task<ActionResult<Component>> PostComponent(Component component)
+        [ProducesResponseType(StatusCodes.Status201Created, Type = typeof(ComponentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<ActionResult<ComponentResponseDto>> CreateComponent([FromBody] CreateComponentDto createComponentDto)
         {
-            // Basic validation for Foreign Keys
-            if (!await _context.Organizations.AnyAsync(o => o.OrganizationId == component.OrganizationId))
-            {
-                return BadRequest("Invalid OrganizationId.");
-            }
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == component.PurchaseUnitId))
-            {
-                return BadRequest("Invalid PurchaseUnitId.");
-            }
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == component.InventoryUnitId))
-            {
-                return BadRequest("Invalid InventoryUnitId.");
-            }
-
-            // ตั้งค่า CreatedAt และ UpdatedAt
-            component.CreatedAt = DateTime.UtcNow;
-            component.UpdatedAt = DateTime.UtcNow;
-
-            _context.Components.Add(component);
-            await _context.SaveChangesAsync();
-
-            // โหลด Navigation Properties เพื่อให้ Object ที่คืนค่ากลับไปมีข้อมูลสมบูรณ์
-            await _context.Entry(component)
-                          .Reference(c => c.PurchaseUnit).LoadAsync();
-            await _context.Entry(component)
-                          .Reference(c => c.InventoryUnit).LoadAsync();
-            await _context.Entry(component)
-                          .Reference(c => c.Organization).LoadAsync();
-
-            return CreatedAtAction(nameof(GetComponent), new { id = component.ComponentId }, component);
-        }
-
-        // --- HTTP PUT: อัปเดตข้อมูล ---
-        // PUT: api/Component/5
-        [Authorize(Roles = "Admin,Manager")]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutComponent(Guid id, Component component)
-        {
-            if (id != component.ComponentId)
-            {
-                return BadRequest("Component ID mismatch.");
-            }
-
-            // Basic validation for Foreign Keys
-            if (!await _context.Organizations.AnyAsync(o => o.OrganizationId == component.OrganizationId))
-            {
-                return BadRequest("Invalid OrganizationId.");
-            }
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == component.PurchaseUnitId))
-            {
-                return BadRequest("Invalid PurchaseUnitId.");
-            }
-            if (!await _context.UnitsOfMeasures.AnyAsync(u => u.UnitId == component.InventoryUnitId))
-            {
-                return BadRequest("Invalid InventoryUnitId.");
-            }
-
-            component.UpdatedAt = DateTime.UtcNow;
-
-            _context.Entry(component).State = EntityState.Modified;
+            // Security: Override organizationId from DTO with authenticated user's organizationId
+            // createComponentDto.OrganizationId = GetOrganizationId();
 
             try
             {
-                await _context.SaveChangesAsync();
+                var createdComponent = await _componentService.CreateComponentAsync(createComponentDto);
+                return CreatedAtAction(nameof(GetComponentById), new { id = createdComponent.ComponentId }, createdComponent);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (InvalidOperationException ex)
             {
-                if (!ComponentExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return Conflict(new { message = ex.Message });
             }
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = "Error creating component: " + ex.Message });
+            }
         }
 
-        // --- HTTP DELETE: ลบข้อมูล ---
-        // DELETE: api/Component/5
-        [Authorize(Roles = "Admin,Manager")]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteComponent(Guid id)
+        /// <summary>
+        /// Updates an existing component.
+        /// </summary>
+        /// <param name="id">The ID of the component to update.</param>
+        /// <param name="updateComponentDto">The updated component data.</param>
+        [HttpPut("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ComponentResponseDto))]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<ComponentResponseDto>> UpdateComponent(Guid id, [FromBody] UpdateComponentDto updateComponentDto)
         {
-            var component = await _context.Components.FindAsync(id);
-            if (component == null)
+            if (id != updateComponentDto.ComponentId)
+            {
+                return BadRequest("Component ID in URL does not match ID in body.");
+            }
+
+            // Security: Ensure updateComponentDto.OrganizationId matches the authenticated user's organization.
+            updateComponentDto.OrganizationId = GetOrganizationId(); // Crucial for security and scoping
+
+            var updatedComponent = await _componentService.UpdateComponentAsync(updateComponentDto);
+
+            if (updatedComponent == null)
             {
                 return NotFound();
             }
-
-            _context.Components.Remove(component);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return Ok(updatedComponent);
         }
 
-        // --- Helper Method: ตรวจสอบว่า Component มีอยู่หรือไม่ ---
-        private bool ComponentExists(Guid id)
+        /// <summary>
+        /// Deletes a component by its ID.
+        /// </summary>
+        /// <param name="id">The ID of the component to delete.</param>
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)] // If deletion is prevented by business logic
+        public async Task<ActionResult> DeleteComponent(Guid id)
         {
-            return _context.Components.Any(e => e.ComponentId == id);
+            var organizationId = GetOrganizationId();
+            try
+            {
+                var result = await _componentService.DeleteComponentAsync(id, organizationId);
+                if (!result)
+                {
+                    // This scenario might mean not found, or could not be deleted for other reasons (e.g., dependencies not throwing exception)
+                    // You can refine this by checking existence first.
+                    var componentExists = await _componentService.GetComponentByIdAsync(id, organizationId);
+                    if (componentExists == null)
+                    {
+                        return NotFound(); // Component not found for this organization
+                    }
+                    else
+                    {
+                        // This case would be hit if DeleteComponentAsync returns false but doesn't throw.
+                        // Given our service throws InvalidOperationException, this path might not be reached directly by business rule.
+                        return StatusCode(StatusCodes.Status500InternalServerError, "Failed to delete component due to an unknown reason.");
+                    }
+                }
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message }); // e.g., "Component cannot be deleted as it is used in a Bill of Material."
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Error deleting component: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Gets the current stock balance for a specific component.
+        /// </summary>
+        /// <param name="id">The ID of the component.</param>
+        [HttpGet("{id}/stock-balance")]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CurrentStockBalanceDto))]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<CurrentStockBalanceDto>> GetComponentStockBalance(Guid id)
+        {
+            var organizationId = GetOrganizationId();
+            var stockBalance = await _componentService.GetComponentStockBalanceAsync(id, organizationId);
+
+            if (stockBalance == null)
+            {
+                return NotFound();
+            }
+            return Ok(stockBalance);
         }
     }
 }

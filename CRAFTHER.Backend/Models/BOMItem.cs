@@ -16,14 +16,19 @@ namespace CRAFTHER.Backend.Models
         [JsonIgnore]
         public Product? ParentProduct { get; set; }
 
-        [Required]
+        // หนึ่งในสองตัวนี้ต้องมีค่า และอีกตัวต้องเป็น null
+        public Guid? ComponentId { get; set; } // FK to Component (Nullable)
+        [ForeignKey(nameof(ComponentId))]
+        public Component? Component { get; set; } // Navigation Property
+
+        public Guid? ProductId { get; set; }   // FK to Product (as sub-product, Nullable)
+        [ForeignKey(nameof(ProductId))]
+        public Product? SubProduct { get; set; } // Navigation Property (เปลี่ยนชื่อเป็น SubProduct เพื่อไม่ให้ซ้ำกับ ParentProduct)
+
+        [Required] // ยังคง ComponentType ไว้เพื่อช่วยในการแยกแยะและ validation
         [MaxLength(10)]
         // ระบุชนิดของส่วนประกอบ: "COMPONENT" (วัตถุดิบ) หรือ "PRODUCT" (สูตรย่อย)
         public string ComponentType { get; set; } = string.Empty;
-
-        [Required]
-        // GUID อ้างอิงถึง ComponentId หรือ ProductId ขึ้นอยู่กับ ComponentType
-        public Guid ComponentReferenceId { get; set; }
 
         [Required]
         [Column(TypeName = "decimal(18, 4)")]

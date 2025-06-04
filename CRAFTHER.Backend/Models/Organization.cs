@@ -39,6 +39,11 @@ namespace CRAFTHER.Backend.Models
         [ForeignKey(nameof(PlanId))]
         public SubscriptionPlan? SubscriptionPlan { get; set; } // Navigation property
 
+        // Navigation Properties: An Organization has many Users, Components, and Products
+        public ICollection<ApplicationUser>? Users { get; set; }
+        public ICollection<Component>? Components { get; set; }
+        public ICollection<Product>? Products { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

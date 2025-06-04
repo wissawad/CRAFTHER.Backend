@@ -1,17 +1,18 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using CRAFTHER.Backend.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 namespace CRAFTHER.Backend.Data
 {
-    // เปลี่ยนจาก DbContext เป็น IdentityDbContext และระบุ ApplicationUser, ApplicationRole, Guid
+    // Changed from DbContext to IdentityDbContext and specified ApplicationUser, ApplicationRole, Guid
     public class ApplicationDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
         }
 
-        // DbSets สำหรับ Model ที่เราสร้างขึ้นเอง
+        // DbSets for custom models
         public DbSet<Organization> Organizations { get; set; } = default!;
         public DbSet<OrganizationIndustryType> OrganizationIndustryTypes { get; set; } = default!;
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; } = default!;
@@ -20,91 +21,239 @@ namespace CRAFTHER.Backend.Data
         public DbSet<Component> Components { get; set; } = default!;
         public DbSet<Product> Products { get; set; } = default!;
         public DbSet<BOMItem> BOMItems { get; set; } = default!;
+        public DbSet<UnitConversion> UnitConversions { get; set; } = default!;
+        public DbSet<StockAdjustmentType> StockAdjustmentTypes { get; set; } = default!;
+        public DbSet<StockAdjustment> StockAdjustments { get; set; } = default!;
+
+        // DbSets for Quest Models
         public DbSet<Quest> Quests { get; set; } = default!;
         public DbSet<UserQuest> UserQuests { get; set; } = default!;
         public DbSet<UserScore> UserScores { get; set; } = default!;
         public DbSet<Level> Levels { get; set; } = default!;
         public DbSet<QuestType> QuestTypes { get; set; } = default!;
-        public DbSet<UnitConversion> UnitConversions { get; set; } = default!;
-        public DbSet<StockAdjustmentType> StockAdjustmentTypes { get; set; } = default!;
-        public DbSet<StockAdjustment> StockAdjustments { get; set; } = default!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(modelBuilder); // ต้องเรียก base.OnModelCreating สำหรับ IdentityDbContext
+            base.OnModelCreating(modelBuilder);
 
-            // --- กำหนด Unique Index สำหรับ Code ใน Component และ Product (สำคัญ!) ---
-            // รหัสต้องไม่ซ้ำกันภายใน Organization เดียวกัน
-            modelBuilder.Entity<Component>()
-                .HasIndex(c => new { c.OrganizationId, c.ComponentCode })
-                .IsUnique();
+            // *** Identity Models Configuration ***
+            // Customizing the table names (optional, but good practice for clarity)
+            modelBuilder.Entity<ApplicationUser>().ToTable("Users");
+            modelBuilder.Entity<ApplicationRole>().ToTable("Roles");
+            modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("UserRoles");
+            modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("UserClaims");
+            modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("UserLogins");
+            modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("RoleClaims");
+            modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("UserTokens");
 
-            modelBuilder.Entity<Product>()
-                .HasIndex(p => new { p.OrganizationId, p.ProductCode })
-                .IsUnique();
-            // ----------------------------------------------------------------------
-
-            // --- กำหนดความสัมพันธ์ระหว่าง ApplicationUser กับ Organization (One-to-Many) ---
+            // Relationship for ApplicationUser to Organization
             modelBuilder.Entity<ApplicationUser>()
                 .HasOne(u => u.Organization)
-                .WithMany() // ถ้าไม่ต้องการ Navigation Property ใน Organization ไปหา Users
+                .WithMany(o => o.Users)
                 .HasForeignKey(u => u.OrganizationId)
-                .OnDelete(DeleteBehavior.Restrict); // ป้องกันการลบ Organization ถ้ายังมี User อยู่
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Organization if Users still exist
 
-            // หากต้องการ Navigation Property ใน Organization เพื่อดู Users:
-            // ไปที่ Organization.cs แล้วเพิ่ม: public ICollection<ApplicationUser>? Users { get; set; }
-            // แล้วใน OnModelCreating:
-            // modelBuilder.Entity<Organization>()
-            //    .HasMany(o => o.Users)
-            //    .WithOne(u => u.Organization)
-            //    .HasForeignKey(u => u.OrganizationId)
-            //    .OnDelete(DeleteBehavior.Restrict);
-            // ----------------------------------------------------------------------
 
-            // Unique Index สำหรับ UserScore เพื่อให้ 1 User มี UserScore ได้แค่ 1 Record
-            modelBuilder.Entity<UserScore>()
-                .HasIndex(us => us.UserId)
+            // *** Core Models Configuration ***
+
+            // OrganizationIndustryType
+            // No specific configurations needed unless unique constraints or data seeding are required
+
+            // SubscriptionPlan
+            // No specific configurations needed unless unique constraints or data seeding are required
+
+            // UnitGroup - Expanded and English
+            modelBuilder.Entity<UnitGroup>().HasIndex(ug => ug.UnitGroupName).IsUnique();
+            modelBuilder.Entity<UnitGroup>().HasData(
+                new UnitGroup { UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitGroupName = "Weight", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitGroup { UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitGroupName = "Volume", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitGroup { UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000003"), UnitGroupName = "Count", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitGroup { UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000004"), UnitGroupName = "Length", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow } // Added more groups
+            );
+
+            // UnitOfMeasure - Expanded and English, with correct conversion factors
+            modelBuilder.Entity<UnitOfMeasure>().HasIndex(u => new { u.UnitGroupId, u.UnitName }).IsUnique();
+            modelBuilder.Entity<UnitOfMeasure>().HasIndex(u => new { u.UnitGroupId, u.Abbreviation }).IsUnique();
+            modelBuilder.Entity<UnitOfMeasure>()
+                .HasOne(u => u.UnitGroup)
+                .WithMany(ug => ug.UnitsOfMeasure)
+                .HasForeignKey(u => u.UnitGroupId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitGroup if UnitOfMeasure exists
+
+            // --- ADDED: Ensure only one base unit per UnitGroup using a filtered index (SQL Server specific) ---
+            modelBuilder.Entity<UnitOfMeasure>()
+                .HasIndex(u => new { u.UnitGroupId, u.IsBaseUnit })
+                .HasFilter("[IsBaseUnit] = 1") // Filters to only apply unique constraint where IsBaseUnit is true
                 .IsUnique();
-            // ----------------------------------------------------------------------
+            // --- END ADDED ---
 
-            // --- แก้ไข: กำหนดพฤติกรรมการลบสำหรับ Component และ UnitOfMeasure ---
+            // Seed Data for UnitOfMeasure (Expanded and English)
+            modelBuilder.Entity<UnitOfMeasure>().HasData(
+                // Weight (Base: Gram)
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000001"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitName = "Gram", Abbreviation = "g", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000002"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitName = "Kilogram", Abbreviation = "kg", IsBaseUnit = false, ConversionFactorToBaseUnit = 1000.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000003"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitName = "Milligram", Abbreviation = "mg", IsBaseUnit = false, ConversionFactorToBaseUnit = 0.001m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000004"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitName = "Pound", Abbreviation = "lb", IsBaseUnit = false, ConversionFactorToBaseUnit = 453.59237m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // Approx. 1 lb = 453.592 g
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000005"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000001"), UnitName = "Ounce", Abbreviation = "oz", IsBaseUnit = false, ConversionFactorToBaseUnit = 28.349523125m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // Approx. 1 oz = 28.3495 g
+
+                // Volume (Base: Milliliter)
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000006"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitName = "Milliliter", Abbreviation = "ml", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000007"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitName = "Liter", Abbreviation = "l", IsBaseUnit = false, ConversionFactorToBaseUnit = 1000.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000008"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitName = "Teaspoon", Abbreviation = "tsp", IsBaseUnit = false, ConversionFactorToBaseUnit = 4.92892m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // Approx. 1 tsp = 4.92892 ml
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-000000000009"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitName = "Tablespoon", Abbreviation = "tbsp", IsBaseUnit = false, ConversionFactorToBaseUnit = 14.7868m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // Approx. 1 tbsp = 14.7868 ml
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000A"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000002"), UnitName = "Cup", Abbreviation = "cup", IsBaseUnit = false, ConversionFactorToBaseUnit = 236.588m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // Approx. 1 cup = 236.588 ml
+
+                // Count (Base: Piece)
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000B"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000003"), UnitName = "Piece", Abbreviation = "pcs", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000C"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000003"), UnitName = "Dozen", Abbreviation = "dz", IsBaseUnit = false, ConversionFactorToBaseUnit = 12.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000D"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000003"), UnitName = "Pair", Abbreviation = "pr", IsBaseUnit = false, ConversionFactorToBaseUnit = 2.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+
+                // Length (Base: Meter)
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000E"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000004"), UnitName = "Meter", Abbreviation = "m", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new UnitOfMeasure { UnitId = Guid.Parse("B0000000-0000-0000-0000-00000000000F"), UnitGroupId = Guid.Parse("A0000000-0000-0000-0000-000000000004"), UnitName = "Centimeter", Abbreviation = "cm", IsBaseUnit = false, ConversionFactorToBaseUnit = 0.01m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
+            );
+
+
+            // Component
+            modelBuilder.Entity<Component>().HasIndex(c => new { c.OrganizationId, c.ComponentCode }).IsUnique();
             modelBuilder.Entity<Component>()
                 .HasOne(c => c.PurchaseUnit)
-                .WithMany() // ไม่จำเป็นต้องมี navigation property ใน UnitOfMeasure กลับมาหา Component
+                .WithMany()
                 .HasForeignKey(c => c.PurchaseUnitId)
-                .OnDelete(DeleteBehavior.Restrict); // สำคัญ: กำหนดเป็น Restrict หรือ NoAction
-
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used as PurchaseUnit
             modelBuilder.Entity<Component>()
                 .HasOne(c => c.InventoryUnit)
-                .WithMany() // ไม่จำเป็นต้องมี navigation property ใน UnitOfMeasure กลับมาหา Component
+                .WithMany()
                 .HasForeignKey(c => c.InventoryUnitId)
-                .OnDelete(DeleteBehavior.Restrict); // สำคัญ: กำหนดเป็น Restrict หรือ NoAction
-            // ---------------------------------------------------------------
-
-            // --- Optional: กำหนด DeleteBehavior สำหรับ BOMItem และ UnitOfMeasure (คล้ายกัน) ---
-            // BOMItem ก็มี UsageUnitId ชี้ไปที่ UnitOfMeasure
-            modelBuilder.Entity<BOMItem>()
-                .HasOne(b => b.UsageUnit)
-                .WithMany()
-                .HasForeignKey(b => b.UsageUnitId)
-                .OnDelete(DeleteBehavior.Restrict);
-            // ---------------------------------------------------------------------------------
-
-            // --- Optional: กำหนด DeleteBehavior สำหรับ Product และ Organization (หาก Organization ถูกลบ, ควรทำอย่างไรกับ Product?) ---
-            // Default ของ EF Core มักจะเป็น Cascade หากไม่ระบุ
-            // หากต้องการป้องกัน Product ถูกลบเมื่อ Organization ถูกลบ:
-            modelBuilder.Entity<Product>()
-                .HasOne(p => p.Organization)
-                .WithMany()
-                .HasForeignKey(p => p.OrganizationId)
-                .OnDelete(DeleteBehavior.Restrict); // หรือ DeleteBehavior.Cascade ถ้าต้องการ
-
-            // --- Optional: กำหนด DeleteBehavior สำหรับ Component และ Organization (หาก Organization ถูกลบ, ควรทำอย่างไรกับ Component?) ---
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used as InventoryUnit
             modelBuilder.Entity<Component>()
                 .HasOne(c => c.Organization)
-                .WithMany()
+                .WithMany(o => o.Components) // Assuming Organization has a Components collection
                 .HasForeignKey(c => c.OrganizationId)
-                .OnDelete(DeleteBehavior.Restrict); // หรือ DeleteBehavior.Cascade ถ้าต้องการ
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Organization if Components exist
+
+            // Product
+            modelBuilder.Entity<Product>().HasIndex(p => new { p.OrganizationId, p.ProductCode }).IsUnique();
+            modelBuilder.Entity<Product>()
+                .HasOne(p => p.ProductUnit)
+                .WithMany()
+                .HasForeignKey(p => p.ProductUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used as ProductUnit
+
+            // --- ADDED: Relationship for Product.SaleUnit ---
+            modelBuilder.Entity<Product>()
+                .HasOne(p => p.SaleUnit)
+                .WithMany() // UnitOfMeasure does not need a collection of Products using it as SaleUnit
+                .HasForeignKey(p => p.SaleUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used as SaleUnit
+            // --- END ADDED ---
+
+            modelBuilder.Entity<Product>()
+                .HasOne(p => p.Organization)
+                .WithMany(o => o.Products) // Assuming Organization has a Products collection
+                .HasForeignKey(p => p.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Organization if Products exist
+
+            // UnitConversion
+            modelBuilder.Entity<UnitConversion>().HasIndex(uc => new { uc.OrganizationId, uc.FromUnitId, uc.ToUnitId }).IsUnique();
+            modelBuilder.Entity<UnitConversion>()
+                .HasOne(uc => uc.FromUnit)
+                .WithMany()
+                .HasForeignKey(uc => uc.FromUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used in UnitConversion
+            modelBuilder.Entity<UnitConversion>()
+                .HasOne(uc => uc.ToUnit)
+                .WithMany()
+                .HasForeignKey(uc => uc.ToUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used in UnitConversion
+            modelBuilder.Entity<UnitConversion>()
+                .HasOne(uc => uc.Organization)
+                .WithMany() // Assuming Organization doesn't need a collection of UnitConversions
+                .HasForeignKey(uc => uc.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Organization if UnitConversions exist
+
+            // StockAdjustmentType - English
+            modelBuilder.Entity<StockAdjustmentType>().HasIndex(sat => sat.Name).IsUnique();
+            modelBuilder.Entity<StockAdjustmentType>().HasData(
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("01A1B2C3-D4E5-6F78-9012-3456789ABC01"), Name = "Receive", Effect = "Increase", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("02A1B2C3-D4E5-6F78-9012-3456789ABC02"), Name = "Issue", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("03A1B2C3-D4E5-6F78-9012-3456789ABC03"), Name = "Positive Adjustment", Effect = "Increase", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("04A1B2C3-D4E5-6F78-9012-3456789ABC04"), Name = "Negative Adjustment", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("05A1B2C3-D4E5-6F78-9012-3456789ABC05"), Name = "Production In", Effect = "Increase", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }, // For finished goods production
+                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("06A1B2C3-D4E5-6F78-9012-3456789ABC06"), Name = "Consumption", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow } // For raw material consumption in production
+            );
+
+            // StockAdjustment
+            modelBuilder.Entity<StockAdjustment>()
+                .HasOne(sa => sa.Organization)
+                .WithMany() // Assuming Organization doesn't need a collection of StockAdjustments
+                .HasForeignKey(sa => sa.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Organization if StockAdjustments exist
+            modelBuilder.Entity<StockAdjustment>()
+                .HasOne(sa => sa.Component)
+                .WithMany() // Assuming Component doesn't need a collection of StockAdjustments
+                .HasForeignKey(sa => sa.ComponentId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Component if StockAdjustments exist
+            modelBuilder.Entity<StockAdjustment>()
+                .HasOne(sa => sa.AdjustmentType)
+                .WithMany() // Assuming StockAdjustmentType doesn't need a collection of StockAdjustments
+                .HasForeignKey(sa => sa.AdjustmentTypeId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting StockAdjustmentType if StockAdjustments exist
+            modelBuilder.Entity<StockAdjustment>()
+                .HasOne(sa => sa.UnitOfMeasure)
+                .WithMany() // Assuming UnitOfMeasure doesn't need a collection of StockAdjustments
+                .HasForeignKey(sa => sa.UnitOfMeasureId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if StockAdjustments exist
+
+
+            // BOMItem
+            modelBuilder.Entity<BOMItem>()
+                .HasOne(bi => bi.ParentProduct)
+                .WithMany(p => p.BOMItems) // Parent Product has a collection of its BOMItems
+                .HasForeignKey(bi => bi.ParentProductId)
+                .OnDelete(DeleteBehavior.Cascade); // If Parent Product is deleted, cascade delete related BOMItems
+
+            // --- ADDED: Relationships for BOMItem's Component and SubProduct ---
+            modelBuilder.Entity<BOMItem>()
+                .HasOne(bi => bi.Component)
+                .WithMany() // Assuming Component doesn't need a direct collection of BOMItems
+                .HasForeignKey(bi => bi.ComponentId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Component if used in BOM
+
+            modelBuilder.Entity<BOMItem>()
+                .HasOne(bi => bi.SubProduct) // Matches the SubProduct navigation property name in BOMItem
+                .WithMany(p => p.SubProductBOMItems) // Matches the collection name in Product Model
+                .HasForeignKey(bi => bi.ProductId) // Matches the FK property name in BOMItem
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Product if used as SubProduct in another BOM
+            // --- END ADDED ---
+
+            modelBuilder.Entity<BOMItem>()
+                .HasOne(bi => bi.UsageUnit)
+                .WithMany() // Assuming UnitOfMeasure doesn't need a collection of BOMItems using it as UsageUnit
+                .HasForeignKey(bi => bi.UsageUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if used in BOMItem
+
+            // Unique index for BOMItem to prevent duplicate components/sub-products for a parent
+            // This ensures a ParentProduct can only have one of a specific Component or one of a specific Product (as SubProduct)
+            modelBuilder.Entity<BOMItem>().HasIndex(bi => new { bi.ParentProductId, bi.ComponentId, bi.ProductId }).IsUnique();
+
+
+            // *** Quest Models Configuration (You must define relationships here if they exist) ***
+            // Example:
+            // modelBuilder.Entity<UserQuest>()
+            //     .HasOne(uq => uq.ApplicationUser)
+            //     .WithMany(u => u.UserQuests)
+            //     .HasForeignKey(uq => uq.UserId)
+            //     .OnDelete(DeleteBehavior.Cascade); // Or Restrict depending on your logic
+
+            // modelBuilder.Entity<UserQuest>()
+            //     .HasOne(uq => uq.Quest)
+            //     .WithMany(q => q.UserQuests)
+            //     .HasForeignKey(uq => uq.QuestId)
+            //     .OnDelete(DeleteBehavior.Restrict);
+
+            // ... and similar configurations for other Quest related models (UserScore, Level, QuestType)
+            // Make sure to define foreign keys and delete behaviors according to your design.
 
             // --- Seeding Data ---
 
@@ -168,46 +317,6 @@ namespace CRAFTHER.Backend.Data
                 }
             );
 
-            // Seeding UnitGroups
-            var liquidUnitGroupId = Guid.Parse("E1F2A3B4-C5D6-E7F8-A9B0-C1D2E3F4A5B6");
-            var solidUnitGroupId = Guid.Parse("F2A3B4C5-D6E7-F8A9-B0C1-D2E3F4A5B6C7");
-            var countUnitGroupId = Guid.Parse("A1B2C3D4-E5F6-7890-1234-567890FEDCBA"); // แก้ไขตรงนี้ให้เป็น Hexadecimal 100%
-
-            modelBuilder.Entity<UnitGroup>().HasData(
-                new UnitGroup { UnitGroupId = liquidUnitGroupId, UnitGroupName = "Liquid Volume", Description = "Units for measuring liquid volume." },
-                new UnitGroup { UnitGroupId = solidUnitGroupId, UnitGroupName = "Weight / Mass", Description = "Units for measuring weight or mass." },
-                new UnitGroup { UnitGroupId = countUnitGroupId, UnitGroupName = "Count / Quantity", Description = "Units for measuring discrete items or counts." }
-            );
-
-            // Seeding UnitOfMeasures
-            // Liquid Volume Units
-            var mlUnitId = Guid.Parse("1A2B3C4D-5E6F-7A8B-9C0D-1E2F3A4B5C6D");
-            var literUnitId = Guid.Parse("2B3C4D5E-6F7A-8B9C-0D1E-2F3A4B5C6D7E");
-            var tbspUnitId = Guid.Parse("3C4D5E6F-7A8B-9C0D-1E2F-3A4B5C6D7E8F");
-            var tspUnitId = Guid.Parse("4D5E6F7A-8B9C-0D1E-2F3A-4B5C6D7E8F9A");
-
-            // Weight/Mass Units
-            var gUnitId = Guid.Parse("5E6F7A8B-9C0D-1E2F-3A4B-5C6D7E8F9A0B");
-            var kgUnitId = Guid.Parse("6F7A8B9C-0D1E-2F3A-4B5C-6D7E8F9A0B1C");
-
-            // Count Units
-            var pieceUnitId = Guid.Parse("7A8B9C0D-1E2F-3A4B-5C6D-7E8F9A0B1C2D");
-
-            modelBuilder.Entity<UnitOfMeasure>().HasData(
-                // Liquid
-                new UnitOfMeasure { UnitId = mlUnitId, UnitGroupId = liquidUnitGroupId, UnitName = "Milliliter", Abbreviation = "ml", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m },
-                new UnitOfMeasure { UnitId = literUnitId, UnitGroupId = liquidUnitGroupId, UnitName = "Liter", Abbreviation = "L", IsBaseUnit = false, ConversionFactorToBaseUnit = 1000.0m },
-                new UnitOfMeasure { UnitId = tbspUnitId, UnitGroupId = liquidUnitGroupId, UnitName = "Tablespoon", Abbreviation = "tbsp", IsBaseUnit = false, ConversionFactorToBaseUnit = 15.0m }, // 1 tbsp = 15 ml
-                new UnitOfMeasure { UnitId = tspUnitId, UnitGroupId = liquidUnitGroupId, UnitName = "Teaspoon", Abbreviation = "tsp", IsBaseUnit = false, ConversionFactorToBaseUnit = 5.0m }, // 1 tsp = 5 ml
-
-                // Weight/Mass
-                new UnitOfMeasure { UnitId = gUnitId, UnitGroupId = solidUnitGroupId, UnitName = "Gram", Abbreviation = "g", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m },
-                new UnitOfMeasure { UnitId = kgUnitId, UnitGroupId = solidUnitGroupId, UnitName = "Kilogram", Abbreviation = "kg", IsBaseUnit = false, ConversionFactorToBaseUnit = 1000.0m },
-
-                // Count
-                new UnitOfMeasure { UnitId = pieceUnitId, UnitGroupId = countUnitGroupId, UnitName = "Piece", Abbreviation = "pc", IsBaseUnit = true, ConversionFactorToBaseUnit = 1.0m }
-            );
-
             // Seeding QuestTypes
             var dailyQuestTypeId = Guid.Parse("A1B2C3D4-E5F6-7890-ABCD-EF0123456789");
             var weeklyQuestTypeId = Guid.Parse("B2C3D4E5-F6A1-2345-CDEF-0123456789AB");
@@ -237,58 +346,6 @@ namespace CRAFTHER.Backend.Data
             modelBuilder.Entity<ApplicationRole>().HasData(
                 new ApplicationRole { Id = adminRoleId, Name = "Admin", NormalizedName = "ADMIN" },
                 new ApplicationRole { Id = userRoleId, Name = "User", NormalizedName = "USER" }
-            );
-
-            // ตั้งค่าสำหรับ UnitConversion
-            modelBuilder.Entity<UnitConversion>()
-                .HasOne(uc => uc.FromUnit)
-                .WithMany()
-                .HasForeignKey(uc => uc.FromUnitId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบหน่วยถ้ามีการใช้งานอยู่ในการแปลง
-
-            modelBuilder.Entity<UnitConversion>()
-                .HasOne(uc => uc.ToUnit)
-                .WithMany()
-                .HasForeignKey(uc => uc.ToUnitId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบหน่วยถ้ามีการใช้งานอยู่ในการแปลง
-
-            // Ensure unique conversion for a given pair of units within an organization
-            modelBuilder.Entity<UnitConversion>()
-                .HasIndex(uc => new { uc.OrganizationId, uc.FromUnitId, uc.ToUnitId })
-                .IsUnique();
-
-            // ตั้งค่าสำหรับ StockAdjustment
-            modelBuilder.Entity<StockAdjustment>()
-                .HasOne(sa => sa.Organization)
-                .WithMany()
-                .HasForeignKey(sa => sa.OrganizationId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบ Organization ถ้ามีการปรับปรุงสต็อกอยู่
-
-            modelBuilder.Entity<StockAdjustment>()
-                .HasOne(sa => sa.Component)
-                .WithMany()
-                .HasForeignKey(sa => sa.ComponentId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบ Component ถ้ามีการปรับปรุงสต็อกอยู่
-
-            modelBuilder.Entity<StockAdjustment>()
-                .HasOne(sa => sa.AdjustmentType)
-                .WithMany()
-                .HasForeignKey(sa => sa.AdjustmentTypeId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบ AdjustmentType ถ้ามีการปรับปรุงสต็อกอยู่
-
-            modelBuilder.Entity<StockAdjustment>()
-                .HasOne(sa => sa.UnitOfMeasure)
-                .WithMany()
-                .HasForeignKey(sa => sa.UnitOfMeasureId)
-                .OnDelete(DeleteBehavior.Restrict); // ไม่ให้ลบ UnitOfMeasure ถ้ามีการปรับปรุงสต็อกอยู่
-
-            // *** Optional: Seed ข้อมูลเริ่มต้นสำหรับ StockAdjustmentType ***
-            modelBuilder.Entity<StockAdjustmentType>().HasData(
-                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("01A1B2C3-D4E5-6F78-9012-3456789ABC01"), Name = "รับเข้า", Effect = "Increase", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("02A1B2C3-D4E5-6F78-9012-3456789ABC02"), Name = "เบิกออก", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("03A1B2C3-D4E5-6F78-9012-3456789ABC03"), Name = "ปรับเพิ่ม", Effect = "Increase", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("04A1B2C3-D4E5-6F78-9012-3456789ABC04"), Name = "ปรับลด", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                new StockAdjustmentType { AdjustmentTypeId = Guid.Parse("05A1B2C3-D4E5-6F78-9012-3456789ABC05"), Name = "ผลผลิต (Product Output)", Effect = "Decrease", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow } // สำหรับลดวัตถุดิบจากการผลิต
             );
         }
     }

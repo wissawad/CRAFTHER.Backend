@@ -28,6 +28,15 @@ namespace CRAFTHER.Backend.Models
         [ForeignKey("ProductUnitId")]
         public UnitOfMeasure? ProductUnit { get; set; }
 
+        [Required]
+        public Guid? SaleUnitId { get; set; } // หน่วยที่ใช้ในการขาย Product (เช่น "ชิ้น" สำหรับเค้ก)
+        [ForeignKey(nameof(SaleUnitId))]
+        public UnitOfMeasure? SaleUnit { get; set; }
+
+        [Required]
+        [Column(TypeName = "decimal(18, 6)")] // ใช้ Precision สูงขึ้นสำหรับอัตราส่วนการแปลง
+        public decimal ProductUnitToSaleUnitConversionFactor { get; set; } // อัตราส่วนการแปลงจาก ProductUnit ไป SaleUnit (เช่น 1 ก้อน = 8 ชิ้น, factor = 8)
+        
         [Column(TypeName = "decimal(18, 4)")]
         public decimal CurrentStockQuantity { get; set; } = 0.0000m;
 
@@ -45,7 +54,11 @@ namespace CRAFTHER.Backend.Models
         [ForeignKey(nameof(OrganizationId))]
         public Organization? Organization { get; set; }
 
+        // Navigation Property: BOMItems ที่ Product นี้เป็น ParentProduct
         public ICollection<BOMItem>? BOMItems { get; set; }
+
+        // Navigation Property: BOMItems ที่ Product นี้ถูกใช้เป็น SubProduct (Optional: หากคุณต้องการรู้ว่า Product นี้ถูกใช้ใน BOM อื่นๆ ที่ไหนบ้าง)
+        public ICollection<BOMItem>? SubProductBOMItems { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
