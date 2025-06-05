@@ -9,5 +9,6 @@
         public Guid UnitId { get; set; }
         public string UnitName { get; set; } = string.Empty;
         public string UnitAbbreviation { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
     }
 }

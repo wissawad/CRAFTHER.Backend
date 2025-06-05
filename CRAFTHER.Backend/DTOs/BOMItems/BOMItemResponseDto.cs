@@ -19,6 +19,7 @@
 
         public string ComponentType { get; set; } = string.Empty;
         public decimal Quantity { get; set; }
+        public decimal WastePercentage { get; set; }
 
         public Guid UsageUnitId { get; set; }
         public string UsageUnitName { get; set; } = string.Empty;

@@ -1,5 +1,7 @@
-﻿using CRAFTHER.Backend.DTOs.Products;
+﻿// Path: CRAFTHER.Backend/Services/IProductService.cs
+using CRAFTHER.Backend.DTOs.Products;
 using CRAFTHER.Backend.DTOs; // สำหรับ CurrentStockBalanceDto
+using CRAFTHER.Backend.DTOs.BOMItems; // เพิ่มเข้ามาสำหรับ WhatIfBomItemDto
 
 namespace CRAFTHER.Backend.Services
 {

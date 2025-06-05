@@ -26,6 +26,11 @@ namespace CRAFTHER.Backend.Data
         public DbSet<StockAdjustmentType> StockAdjustmentTypes { get; set; } = default!;
         public DbSet<StockAdjustment> StockAdjustments { get; set; } = default!;
 
+        // --- เพิ่ม DbSets สำหรับ ProductionOrder Models ---
+        public DbSet<ProductionOrder> ProductionOrders { get; set; } = default!;
+        public DbSet<ProductionOrderItem> ProductionOrderItems { get; set; } = default!;
+        // --------------------------------------------------
+
         // DbSets for Quest Models
         public DbSet<Quest> Quests { get; set; } = default!;
         public DbSet<UserQuest> UserQuests { get; set; } = default!;
@@ -196,6 +201,11 @@ namespace CRAFTHER.Backend.Data
                 .HasForeignKey(sa => sa.ComponentId)
                 .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Component if StockAdjustments exist
             modelBuilder.Entity<StockAdjustment>()
+                .HasOne(sa => sa.Product) // Navigation property ไปยัง Product
+                .WithMany() // Assuming Product doesn't need a collection of StockAdjustments
+                .HasForeignKey(sa => sa.ProductId) // ProductId ที่เพิ่มเข้ามา
+                .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Product if StockAdjustments exist
+            modelBuilder.Entity<StockAdjustment>()
                 .HasOne(sa => sa.AdjustmentType)
                 .WithMany() // Assuming StockAdjustmentType doesn't need a collection of StockAdjustments
                 .HasForeignKey(sa => sa.AdjustmentTypeId)
@@ -205,6 +215,16 @@ namespace CRAFTHER.Backend.Data
                 .WithMany() // Assuming UnitOfMeasure doesn't need a collection of StockAdjustments
                 .HasForeignKey(sa => sa.UnitOfMeasureId)
                 .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UnitOfMeasure if StockAdjustments exist
+            // *** เพิ่ม Unique Index เพื่อบังคับว่า Adjustment ต้องมีแค่ Component หรือ Product เท่านั้น ***
+            // Unique index: ห้ามมี ComponentId และ ProductId มีค่าพร้อมกันใน StockAdjustment เดียวกัน (partial unique index)
+            // สำหรับ SQL Server, Filtered Index ใช้ HasFilter:
+            modelBuilder.Entity<StockAdjustment>()
+                .HasIndex(sa => new { sa.ComponentId, sa.ProductId })
+                .IsUnique()
+                // เพิ่ม HasFilter เพื่อบังคับว่าต้องไม่เป็น NULL ทั้งคู่
+                .HasFilter("[ComponentId] IS NOT NULL AND [ProductId] IS NOT NULL")
+                .HasDatabaseName("IX_StockAdjustments_ComponentId_ProductId_NotNull"); // ตั้งชื่อ Index ให้ชัดเจน
+            // *** สิ้นสุดการเพิ่ม Unique Index ***
 
 
             // BOMItem
@@ -237,6 +257,58 @@ namespace CRAFTHER.Backend.Data
             // Unique index for BOMItem to prevent duplicate components/sub-products for a parent
             // This ensures a ParentProduct can only have one of a specific Component or one of a specific Product (as SubProduct)
             modelBuilder.Entity<BOMItem>().HasIndex(bi => new { bi.ParentProductId, bi.ComponentId, bi.ProductId }).IsUnique();
+
+            // --- เพิ่ม ProductionOrder Configuration ---
+            modelBuilder.Entity<ProductionOrder>().HasIndex(po => new { po.OrganizationId, po.ProductionOrderCode }).IsUnique();
+            modelBuilder.Entity<ProductionOrder>()
+                .HasOne(po => po.Organization)
+                .WithMany() // ถ้าไม่ต้องการ Navigation Property ใน Organization
+                .HasForeignKey(po => po.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ Organization ถ้ามี ProductionOrder ผูกอยู่
+
+            modelBuilder.Entity<ProductionOrder>()
+                .HasOne(po => po.Product)
+                .WithMany() // Product ไม่มี Collection ของ ProductionOrders โดยตรง
+                .HasForeignKey(po => po.ProductId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ Product ถ้ามี ProductionOrder ผูกอยู่
+
+            modelBuilder.Entity<ProductionOrder>()
+                .HasOne(po => po.UnitOfMeasure)
+                .WithMany()
+                .HasForeignKey(po => po.UnitOfMeasureId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ UnitOfMeasure ถ้ามี ProductionOrder ผูกอยู่
+            // ------------------------------------------
+
+            // --- เพิ่ม ProductionOrderItem Configuration ---
+            modelBuilder.Entity<ProductionOrderItem>()
+                .HasOne(poi => poi.ProductionOrder)
+                .WithMany(po => po.ProductionOrderItems) // ProductionOrder มี Collection ของ ProductionOrderItems
+                .HasForeignKey(poi => poi.ProductionOrderId)
+                .OnDelete(DeleteBehavior.Cascade); // ถ้าลบ ProductionOrder ให้ลบ ProductionOrderItem ที่เกี่ยวข้องด้วย
+
+            modelBuilder.Entity<ProductionOrderItem>()
+                .HasOne(poi => poi.Component)
+                .WithMany()
+                .HasForeignKey(poi => poi.ComponentId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ Component ถ้าถูกใช้ใน ProductionOrderItem
+
+            modelBuilder.Entity<ProductionOrderItem>()
+                .HasOne(poi => poi.SubProduct) // ใช้ SubProduct ตามชื่อใน Model
+                .WithMany() // Product ไม่มี Collection ของ ProductionOrderItems (เป็น SubProduct) โดยตรง
+                .HasForeignKey(poi => poi.ProductId) // ใช้ ProductId เป็น Foreign Key
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ Product ถ้าถูกใช้ใน ProductionOrderItem
+
+            modelBuilder.Entity<ProductionOrderItem>()
+                .HasOne(poi => poi.UsageUnit)
+                .WithMany()
+                .HasForeignKey(poi => poi.UsageUnitId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ UnitOfMeasure ถ้าถูกใช้ใน ProductionOrderItem
+
+            // Unique index: ห้ามมี Component/Product ซ้ำกันใน ProductionOrder เดียวกัน
+            modelBuilder.Entity<ProductionOrderItem>()
+                .HasIndex(poi => new { poi.ProductionOrderId, poi.ComponentId, poi.ProductId })
+                .IsUnique();
+            // ----------------------------------------------
 
 
             // *** Quest Models Configuration (You must define relationships here if they exist) ***

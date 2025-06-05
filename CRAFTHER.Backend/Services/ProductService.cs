@@ -1,18 +1,33 @@
-﻿using CRAFTHER.Backend.Data;
+﻿// Path: CRAFTHER.Backend/Services/ProductService.cs
+using CRAFTHER.Backend.Data;
 using CRAFTHER.Backend.DTOs.Products;
 using CRAFTHER.Backend.DTOs; // For CurrentStockBalanceDto
 using CRAFTHER.Backend.Models;
 using Microsoft.EntityFrameworkCore;
+// using CRAFTHER.Backend.Services; // ลบ using นี้ออก เพราะไม่จำเป็นต้อง Inject IUnitConversionService, IComponentService, IBOMItemService ที่นี่แล้ว
+using CRAFTHER.Backend.DTOs.BOMItems; // เพิ่มเข้ามาสำหรับ WhatIfBomItemDto (ถ้ายังใช้ใน DTO mapping หรืออื่นๆ)
 
 namespace CRAFTHER.Backend.Services
 {
     public class ProductService : IProductService
     {
         private readonly ApplicationDbContext _context;
+        // private readonly IUnitConversionService _unitConversionService; // ลบออก
+        // private readonly IComponentService _componentService; // ลบออก
+        // private readonly IBOMItemService _bomItemService; // ลบออก
+        private readonly IProductCostingService _productCostingService; // Inject IProductCostingService
 
-        public ProductService(ApplicationDbContext context)
+        public ProductService(ApplicationDbContext context,
+                              // IUnitConversionService unitConversionService, // ลบออก
+                              // IComponentService componentService, // ลบออก
+                              // IBOMItemService bomItemService, // ลบออก
+                              IProductCostingService productCostingService) // Inject IProductCostingService
         {
             _context = context;
+            // _unitConversionService = unitConversionService; // ลบออก
+            // _componentService = componentService; // ลบออก
+            // _bomItemService = bomItemService; // ลบออก
+            _productCostingService = productCostingService; // Assign it
         }
 
         // Helper method to map Product Model to ProductResponseDto
@@ -20,10 +35,6 @@ namespace CRAFTHER.Backend.Services
         {
             if (product == null) return null;
 
-            // Ensure related entities are loaded if not already included in the query.
-            // This is crucial if using AsNoTracking() or if the entities weren't eager-loaded.
-            // If you always use .Include() in your queries, these LoadAsync calls might not be strictly necessary,
-            // but they provide a safety net.
             if (product.ProductUnit == null)
             {
                 await _context.Entry(product).Reference(p => p.ProductUnit).LoadAsync();
@@ -49,7 +60,7 @@ namespace CRAFTHER.Backend.Services
                 CalculatedCost = product.CalculatedCost,
                 IsSubProduct = product.IsSubProduct,
                 ProductUnitId = product.ProductUnitId,
-                ProductUnitName = product.ProductUnit?.UnitName ?? "N/A", // Handle potential null if not loaded
+                ProductUnitName = product.ProductUnit?.UnitName ?? "N/A",
                 ProductUnitAbbreviation = product.ProductUnit?.Abbreviation ?? "N/A",
                 SaleUnitId = product.SaleUnitId,
                 SaleUnitName = product.SaleUnit?.UnitName,
@@ -65,17 +76,15 @@ namespace CRAFTHER.Backend.Services
         {
             var products = await _context.Products
                 .Where(p => p.OrganizationId == organizationId)
-                .Include(p => p.ProductUnit) // Eager load ProductUnit for DTO mapping
-                .Include(p => p.SaleUnit)    // Eager load SaleUnit for DTO mapping
-                .Include(p => p.Organization) // Eager load Organization for DTO mapping
-                .AsNoTracking() // Good practice for read-only queries to improve performance
+                .Include(p => p.ProductUnit)
+                .Include(p => p.SaleUnit)
+                .Include(p => p.Organization)
+                .AsNoTracking()
                 .ToListAsync();
 
             var productDtos = new List<ProductResponseDto>();
             foreach (var product in products)
             {
-                // No need for await here if MapProductToResponseDto only depends on loaded data
-                // But if it contains other async calls like .LoadAsync() as above, keep await.
                 productDtos.Add((await MapProductToResponseDto(product))!);
             }
             return productDtos;
@@ -96,7 +105,6 @@ namespace CRAFTHER.Backend.Services
 
         public async Task<ProductResponseDto> CreateProductAsync(CreateProductDto createProductDto)
         {
-            // Optional: Check for unique ProductCode within the organization before creating
             var existingProduct = await _context.Products
                 .AnyAsync(p => p.OrganizationId == createProductDto.OrganizationId &&
                                p.ProductCode == createProductDto.ProductCode);
@@ -107,7 +115,7 @@ namespace CRAFTHER.Backend.Services
 
             var product = new Product
             {
-                ProductId = Guid.NewGuid(), // Generate new ID
+                ProductId = Guid.NewGuid(),
                 ProductCode = createProductDto.ProductCode,
                 ProductName = createProductDto.ProductName,
                 Description = createProductDto.Description,
@@ -117,8 +125,8 @@ namespace CRAFTHER.Backend.Services
                 IsSubProduct = createProductDto.IsSubProduct,
                 OrganizationId = createProductDto.OrganizationId,
                 SaleUnitId = createProductDto.SaleUnitId,
-                CurrentStockQuantity = 0, // Initial stock is 0 for a new product
-                CalculatedCost = 0, // Initial calculated cost (might be updated later by business logic)
+                CurrentStockQuantity = 0,
+                CalculatedCost = 0, // Initial calculated cost will be 0, recalculated later if BOM exists
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -126,15 +134,16 @@ namespace CRAFTHER.Backend.Services
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
-            // After saving, load related entities to map to DTO
-            // This is important because the DTO needs data from ProductUnit, SaleUnit, Organization
-            // which are not automatically loaded unless included in a query or explicitly loaded.
             await _context.Entry(product).Reference(p => p.ProductUnit).LoadAsync();
             if (product.SaleUnitId.HasValue)
             {
                 await _context.Entry(product).Reference(p => p.SaleUnit).LoadAsync();
             }
             await _context.Entry(product).Reference(p => p.Organization).LoadAsync();
+
+            // ไม่ต้องเรียก RecalculateProductCostAsync ที่นี่ใน CreateProduct
+            // เพราะ CalculatedCost จะเป็น 0 อยู่แล้วจนกว่าจะมี BOM Items เพิ่มเข้ามา
+            // การคำนวณจะถูก Trigger เมื่อ BOM Item ถูกสร้าง/อัปเดต
 
             return (await MapProductToResponseDto(product))!;
         }
@@ -158,29 +167,19 @@ namespace CRAFTHER.Backend.Services
             if (updateProductDto.SellingPrice.HasValue) product.SellingPrice = updateProductDto.SellingPrice.Value;
             if (updateProductDto.IsSubProduct.HasValue) product.IsSubProduct = updateProductDto.IsSubProduct.Value;
 
-            // Handling SaleUnitId update explicitly for nullable:
-            // If SaleUnitId is explicitly passed as null, set it to null.
-            // If SaleUnitId has a value, set it.
-            // If SaleUnitId is not passed (its default value for nullable Guid is Guid.Empty), do nothing.
-            // Note: This logic assumes that if SaleUnitId is provided as default(Guid) or not provided,
-            // we don't update it. If it's explicitly null, then set to null.
-            if (updateProductDto.SaleUnitId != null) // If a value or null is explicitly provided
+            if (updateProductDto.SaleUnitId != null)
             {
                 product.SaleUnitId = updateProductDto.SaleUnitId;
             }
 
-
-            product.UpdatedAt = DateTime.UtcNow; // Update timestamp
+            product.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
 
-            // After saving, load related entities to map to DTO
-            await _context.Entry(product).Reference(p => p.ProductUnit).LoadAsync();
-            if (product.SaleUnitId.HasValue) // Check if SaleUnitId has a value before trying to load
-            {
-                await _context.Entry(product).Reference(p => p.SaleUnit).LoadAsync();
-            }
-            await _context.Entry(product).Reference(p => p.Organization).LoadAsync();
+            // Trigger cost recalculation for this product after its own update (if it has BOM items)
+            // หรือหากมีการเปลี่ยน IsSubProduct เป็น true แล้วมันถูกใช้ใน BOM อื่น ก็อาจต้องคำนวณใหม่
+            // _productCostingService จะจัดการการคำนวณจริง
+            await _productCostingService.RecalculateProductCostAsync(product.ProductId, product.OrganizationId);
 
             return (await MapProductToResponseDto(product))!;
         }
@@ -196,15 +195,10 @@ namespace CRAFTHER.Backend.Services
                 return false; // Product not found or does not belong to the specified organization
             }
 
-            // Optional: Add business logic to prevent deletion if product is in use
-            // For example, if it's part of a BOMItem (as ParentProduct or SubProduct)
             var isUsedInBOMs = await _context.BOMItems.AnyAsync(bi => bi.ParentProductId == productId || bi.ProductId == productId);
             if (isUsedInBOMs)
             {
-                // You might throw an exception here, or return a specific error code
-                // For simplicity, returning false. Controller can decide how to handle this.
-                // throw new InvalidOperationException("Product cannot be deleted as it is used in a Bill of Material.");
-                return false;
+                throw new InvalidOperationException("Product cannot be deleted as it is used in a Bill of Material (as a parent or sub-product).");
             }
 
             _context.Products.Remove(product);
@@ -216,7 +210,7 @@ namespace CRAFTHER.Backend.Services
         {
             var product = await _context.Products
                 .Where(p => p.ProductId == productId && p.OrganizationId == organizationId)
-                .Include(p => p.ProductUnit) // Ensure ProductUnit is loaded for the DTO
+                .Include(p => p.ProductUnit)
                 .AsNoTracking()
                 .Select(p => new CurrentStockBalanceDto
                 {
@@ -232,5 +226,10 @@ namespace CRAFTHER.Backend.Services
 
             return product;
         }
+
+        // --- ลบเมธอด CalculateBOMCostInternal, RecalculateProductCostAsync และ GetWhatIfCalculatedCostAsync ออก ---
+        // (ย้ายไปที่ ProductCostingService แล้ว)
+        // --- ลบเมธอด RecalculateProductsAffectedByComponentPriceChange ออกจาก ProductService ---
+        // (ย้ายไปที่ ProductCostingService แล้ว)
     }
 }

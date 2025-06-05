@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿// Path: CRAFTHER.Backend/Program.cs
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using CRAFTHER.Backend.Data;
 using CRAFTHER.Backend.Models;
@@ -98,6 +99,10 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// Register Product Costing Service
+builder.Services.AddScoped<IProductCostingService, ProductCostingService>();
+
+// Register existing services (adjusting only if their constructors changed)
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IComponentService, ComponentService>();
 builder.Services.AddScoped<IBOMItemService, BOMItemService>();

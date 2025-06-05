@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿// Path: CRAFTHER.Backend/DTOs/BOMItems/UpdateBOMItemDto.cs
+using System.ComponentModel.DataAnnotations;
 
 namespace CRAFTHER.Backend.DTOs.BOMItems
 {
@@ -19,6 +20,10 @@ namespace CRAFTHER.Backend.DTOs.BOMItems
         [Range(0.000001, (double)decimal.MaxValue, ErrorMessage = "Quantity must be greater than 0.")]
         public decimal? Quantity { get; set; }
 
+        // เพิ่ม WastePercentage เข้ามาใน Update DTO (เป็น Nullable เพราะอาจจะไม่ได้อัปเดตทุกครั้ง)
+        [Range(0.00, 100.00, ErrorMessage = "Waste Percentage must be between 0 and 100.")]
+        public decimal? WastePercentage { get; set; } // Nullable
+
         public Guid? UsageUnitId { get; set; }
 
         [StringLength(255, ErrorMessage = "Remarks cannot exceed 255 characters.")]
@@ -37,14 +42,6 @@ namespace CRAFTHER.Backend.DTOs.BOMItems
                 {
                     if (!ComponentId.HasValue && !SubProductId.HasValue)
                     {
-                        // Allow nulls if no change, but if they try to update ComponentType,
-                        // one of them must be provided or become null as per rule.
-                        // This validation is for explicit setting, not for leaving un-changed.
-                        // If ComponentId is set, SubProductId must be null. If SubProductId is set, ComponentId must be null.
-                        // If neither are set but ComponentType is, this is an issue.
-                        // For update, we consider the current state of the model. This is more complex.
-                        // For simplicity in DTO validation, let's enforce that if ComponentType is set,
-                        // then the corresponding ID must be provided, and the other must be null.
                         yield return new ValidationResult("ComponentId is required and SubProductId must be null when ComponentType is 'COMPONENT'.", new[] { nameof(ComponentId), nameof(SubProductId) });
                     }
                     if (ComponentId.HasValue && SubProductId.HasValue)
@@ -76,8 +73,6 @@ namespace CRAFTHER.Backend.DTOs.BOMItems
                     yield return new ValidationResult("ComponentType must be either 'COMPONENT' or 'PRODUCT'.", new[] { nameof(ComponentType) });
                 }
             }
-            // If ComponentType is null, no validation is performed here,
-            // as it implies no change to ComponentType. The service will handle default/existing values.
         }
     }
 }

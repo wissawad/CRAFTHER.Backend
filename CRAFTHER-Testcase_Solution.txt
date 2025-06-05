@@ -28,7 +28,7 @@
     * `Product` Model มี `CalculatedCost` อยู่แล้ว.
     * `ProductService` มีเมธอดสำหรับ `UpdateProductAsync`.
     * `BOMItem` Model มีข้อมูลว่า `ParentProduct` ใช้ `Component` หรือ `SubProduct` ตัวไหนบ้าง ด้วย `Quantity` และ `UsageUnit`.
-    * `UnitConversionService` สามารถหา Conversion Factor ระหว่างหน่วยได้.
+    * `UnitConversionService` สามารถหา Conversion Factor ระหว่างหน่วยได้.	
 * **สิ่งที่ต้องเพิ่ม/ปรับปรุง:**
     * **Logic ใน `ProductService`:** นี่คือ Core Logic ที่สำคัญที่สุด. เมื่อ `UnitPrice` ของ `Component` มีการเปลี่ยนแปลง (หรือ `CalculatedCost` ของ `SubProduct` เปลี่ยนแปลง):
         * ต้องมีการ Trigger ให้ระบบไปหา `Products` ทั้งหมดที่ใช้ `Component` หรือ `SubProduct` นั้นๆ เป็นส่วนประกอบใน `BOMItems`.

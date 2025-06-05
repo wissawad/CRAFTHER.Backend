@@ -9,22 +9,31 @@ namespace CRAFTHER.Backend.DTOs.StockAdjustments
         public Guid OrganizationId { get; set; }
         public string OrganizationName { get; set; } = string.Empty;
 
-        public Guid ComponentId { get; set; }
-        public string ComponentCode { get; set; } = string.Empty;
-        public string ComponentName { get; set; } = string.Empty;
-        public decimal ComponentCurrentStockQuantity { get; set; } // Stock quantity of component after this adjustment
+        // *** เพิ่ม ProductId และเปลี่ยนชื่อ/โครงสร้างสำหรับ Component/Product ***
+        public Guid? ComponentId { get; set; }
+        public string? ComponentCode { get; set; } // เปลี่ยนเป็น nullable
+        public string? ComponentName { get; set; } // เปลี่ยนเป็น nullable
+        public string? ComponentInventoryUnitAbbreviation { get; set; } // เปลี่ยนเป็น nullable
+
+        public Guid? ProductId { get; set; } // เพิ่ม ProductId
+        public string? ProductCode { get; set; } // เพิ่ม ProductCode
+        public string? ProductName { get; set; } // เพิ่ม ProductName
+        public string? ProductUnitAbbreviation { get; set; } // เพิ่ม ProductUnitAbbreviation
+
+        public decimal ItemCurrentStockQuantity { get; set; } // เปลี่ยนชื่อจาก ComponentCurrentStockQuantity
+        // *** สิ้นสุดการเพิ่ม/เปลี่ยนแปลง ***
 
         public Guid AdjustmentTypeId { get; set; }
         public string AdjustmentTypeName { get; set; } = string.Empty;
-        public string AdjustmentTypeEffect { get; set; } = string.Empty; // "Increase" or "Decrease"
+        public string AdjustmentTypeEffect { get; set; } = string.Empty;
 
         public decimal Quantity { get; set; }
         public Guid UnitOfMeasureId { get; set; }
         public string UnitOfMeasureName { get; set; } = string.Empty;
         public string UnitOfMeasureAbbreviation { get; set; } = string.Empty;
 
-        public decimal QuantityBeforeAdjustment { get; set; } // ยอดสต็อกของ Component ใน InventoryUnit ก่อนการปรับปรุง
-        public decimal QuantityAfterAdjustment { get; set; } // ยอดสต็อกของ Component ใน InventoryUnit หลังการปรับปรุง
+        public decimal QuantityBeforeAdjustment { get; set; }
+        public decimal QuantityAfterAdjustment { get; set; }
 
         public string? Notes { get; set; }
         public DateTime AdjustmentDate { get; set; }

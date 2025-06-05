@@ -1,4 +1,5 @@
-﻿using CRAFTHER.Backend.Data;
+﻿// Path: CRAFTHER.Backend/Services/BOMItemService.cs
+using CRAFTHER.Backend.Data;
 using CRAFTHER.Backend.DTOs.BOMItems;
 using CRAFTHER.Backend.Models;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +13,12 @@ namespace CRAFTHER.Backend.Services
     public class BOMItemService : IBOMItemService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IProductCostingService _productCostingService; // Inject IProductCostingService แทน IProductService
 
-        public BOMItemService(ApplicationDbContext context)
+        public BOMItemService(ApplicationDbContext context, IProductCostingService productCostingService) // เปลี่ยน parameter ใน Constructor
         {
             _context = context;
+            _productCostingService = productCostingService; // Assign it
         }
 
         // Helper method to map BOMItem Model to BOMItemResponseDto
@@ -80,6 +83,7 @@ namespace CRAFTHER.Backend.Services
 
                 ComponentType = bomItem.ComponentType,
                 Quantity = bomItem.Quantity,
+                WastePercentage = bomItem.WastePercentage, // เพิ่ม WastePercentage เข้ามาใน DTO Response
 
                 UsageUnitId = bomItem.UsageUnitId,
                 UsageUnitName = bomItem.UsageUnit?.UnitName ?? "N/A",
@@ -148,8 +152,9 @@ namespace CRAFTHER.Backend.Services
         public async Task<BOMItemResponseDto> CreateBOMItemAsync(CreateBOMItemDto createBOMItemDto)
         {
             // 1. Verify ParentProduct exists and belongs to the organization
+            // TODO: Ensure organizationId is from authenticated user (original code already had this note)
             var parentProduct = await _context.Products
-                .Where(p => p.ProductId == createBOMItemDto.ParentProductId && p.OrganizationId == createBOMItemDto.ParentProductId) // TODO: Ensure organizationId is from authenticated user
+                .Where(p => p.ProductId == createBOMItemDto.ParentProductId && p.OrganizationId == createBOMItemDto.ParentProductId)
                 .FirstOrDefaultAsync();
             if (parentProduct == null)
             {
@@ -181,39 +186,30 @@ namespace CRAFTHER.Backend.Services
                 var subProduct = await _context.Products
                     .Where(p => p.ProductId == createBOMItemDto.SubProductId.Value && p.OrganizationId == parentProduct.OrganizationId)
                     .FirstOrDefaultAsync();
-                if (subProduct == null) // || !subProduct.IsSubProduct (if you strictly enforce IsSubProduct for sub-products)
+                if (subProduct == null)
                 {
                     throw new InvalidOperationException($"Sub-product with ID '{createBOMItemDto.SubProductId}' not found or does not belong to the organization.");
                 }
-                // Prevent circular dependency: A product cannot be a sub-product of itself, or be a sub-product of a BOM that it's already part of
+                // Prevent circular dependency
                 if (createBOMItemDto.SubProductId.Value == createBOMItemDto.ParentProductId)
                 {
                     throw new InvalidOperationException("A product cannot be a sub-product of itself in a BOM.");
                 }
-                // Check for deeper circular dependencies (e.g., A -> B, B -> A) - requires recursive check, too complex for initial implementation.
-                // For now, only direct self-reference is prevented.
             }
             else
             {
                 throw new ArgumentException("ComponentType must be 'COMPONENT' or 'PRODUCT'.");
             }
 
-            //// 3. Verify UsageUnit exists and belongs to the same organization (or is a global unit)
-            //var usageUnitExists = await _context.UnitsOfMeasures
-            //    .AnyAsync(u => u.UnitId == createBOMItemDto.UsageUnitId && u.OrganizationId == parentProduct.OrganizationId); // Assuming units are per organization or global
-            //if (!usageUnitExists)
-            //{
-            //    throw new InvalidOperationException($"Usage unit with ID '{createBOMItemDto.UsageUnitId}' not found for this organization.");
-            //}
-
             var bomItem = new BOMItem
             {
                 BOMItemId = Guid.NewGuid(),
                 ParentProductId = createBOMItemDto.ParentProductId,
                 ComponentId = createBOMItemDto.ComponentId,
-                ProductId = createBOMItemDto.SubProductId, // Map SubProductId from DTO to ProductId in model
+                ProductId = createBOMItemDto.SubProductId,
                 ComponentType = createBOMItemDto.ComponentType.ToUpper(),
                 Quantity = createBOMItemDto.Quantity,
+                WastePercentage = createBOMItemDto.WastePercentage,
                 UsageUnitId = createBOMItemDto.UsageUnitId,
                 Remarks = createBOMItemDto.Remarks,
                 SortOrder = createBOMItemDto.SortOrder,
@@ -224,7 +220,9 @@ namespace CRAFTHER.Backend.Services
             _context.BOMItems.Add(bomItem);
             await _context.SaveChangesAsync();
 
-            // Load related entities for the response DTO
+            // Trigger recalculation of Parent Product's cost after BOM Item is created
+            await _productCostingService.RecalculateProductCostAsync(bomItem.ParentProductId, parentProduct.OrganizationId); // เรียกใช้ ProductCostingService แทน ProductService
+
             return (await MapBOMItemToResponseDto(bomItem))!;
         }
 
@@ -239,15 +237,15 @@ namespace CRAFTHER.Backend.Services
                 return null; // BOM Item not found or does not belong to the specified parent product
             }
 
-            // Verify the ParentProduct belongs to the organization (to prevent unauthorized updates)
+            // Verify the ParentProduct belongs to the organization
+            // TODO: Ensure organizationId is from authenticated user (original code already had this note)
             var parentProduct = await _context.Products
-                .Where(p => p.ProductId == updateBOMItemDto.ParentProductId && p.OrganizationId == updateBOMItemDto.ParentProductId) // TODO: Ensure organizationId is from authenticated user
+                .Where(p => p.ProductId == updateBOMItemDto.ParentProductId && p.OrganizationId == updateBOMItemDto.ParentProductId)
                 .FirstOrDefaultAsync();
             if (parentProduct == null)
             {
                 throw new InvalidOperationException($"Parent product with ID '{updateBOMItemDto.ParentProductId}' not found or does not belong to the organization.");
             }
-
 
             // --- Handle ComponentType and ID changes ---
             string effectiveComponentType = updateBOMItemDto.ComponentType?.ToUpper() ?? bomItem.ComponentType.ToUpper();
@@ -310,6 +308,7 @@ namespace CRAFTHER.Backend.Services
 
             // Apply other updates if value is provided
             if (updateBOMItemDto.Quantity.HasValue) bomItem.Quantity = updateBOMItemDto.Quantity.Value;
+            if (updateBOMItemDto.WastePercentage.HasValue) bomItem.WastePercentage = updateBOMItemDto.WastePercentage.Value; // Map WastePercentage
             if (updateBOMItemDto.UsageUnitId.HasValue) bomItem.UsageUnitId = updateBOMItemDto.UsageUnitId.Value;
             if (updateBOMItemDto.Remarks != null) bomItem.Remarks = updateBOMItemDto.Remarks;
             if (updateBOMItemDto.SortOrder.HasValue) bomItem.SortOrder = updateBOMItemDto.SortOrder.Value;
@@ -317,6 +316,9 @@ namespace CRAFTHER.Backend.Services
             bomItem.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+
+            // Trigger recalculation of Parent Product's cost after BOM Item is updated
+            await _productCostingService.RecalculateProductCostAsync(bomItem.ParentProductId, parentProduct.OrganizationId); // เรียกใช้ ProductCostingService แทน ProductService
 
             return (await MapBOMItemToResponseDto(bomItem))!;
         }
@@ -342,6 +344,10 @@ namespace CRAFTHER.Backend.Services
 
             _context.BOMItems.Remove(bomItem);
             await _context.SaveChangesAsync();
+
+            // Trigger recalculation of Parent Product's cost after BOM Item is deleted
+            await _productCostingService.RecalculateProductCostAsync(bomItem.ParentProductId, organizationId); // เรียกใช้ ProductCostingService แทน ProductService
+
             return true;
         }
     }

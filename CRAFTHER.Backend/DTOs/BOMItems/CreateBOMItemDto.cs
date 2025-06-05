@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿// Path: CRAFTHER.Backend/DTOs/BOMItems/CreateBOMItemDto.cs
+using System.ComponentModel.DataAnnotations;
 
 namespace CRAFTHER.Backend.DTOs.BOMItems
 {
@@ -19,6 +20,11 @@ namespace CRAFTHER.Backend.DTOs.BOMItems
         [Required(ErrorMessage = "Quantity is required.")]
         [Range(0.000001, (double)decimal.MaxValue, ErrorMessage = "Quantity must be greater than 0.")]
         public decimal Quantity { get; set; }
+
+        // เพิ่ม WastePercentage เข้ามาใน Create DTO
+        [Required(ErrorMessage = "Waste Percentage is required.")]
+        [Range(0.00, 100.00, ErrorMessage = "Waste Percentage must be between 0 and 100.")]
+        public decimal WastePercentage { get; set; } = 0.00m; // กำหนดค่าเริ่มต้นเพื่อให้ไม่ต้องส่งมาหากเป็น 0
 
         [Required(ErrorMessage = "Usage Unit ID is required.")]
         public Guid UsageUnitId { get; set; }

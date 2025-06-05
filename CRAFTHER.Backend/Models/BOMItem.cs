@@ -34,6 +34,11 @@ namespace CRAFTHER.Backend.Models
         [Column(TypeName = "decimal(18, 4)")]
         public decimal Quantity { get; set; } // ปริมาณที่ใช้ของส่วนประกอบนั้นๆ ใน UsageUnit
 
+        [Required(ErrorMessage = "Waste Percentage is required.")]
+        [Column(TypeName = "decimal(5, 2)")] // เช่น 99.99%
+        [Range(0.00, 100.00, ErrorMessage = "Waste Percentage must be between 0 and 100.")]
+        public decimal WastePercentage { get; set; } = 0.00m; // ค่าเริ่มต้นเป็น 0%
+
         // Foreign Key สำหรับหน่วยที่ใช้ระบุปริมาณในสูตร (เช่น ml, g, ชิ้น)
         [Required]
         public Guid UsageUnitId { get; set; }

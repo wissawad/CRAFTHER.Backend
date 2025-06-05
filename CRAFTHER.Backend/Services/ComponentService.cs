@@ -1,4 +1,5 @@
-﻿using CRAFTHER.Backend.Data;
+﻿// Path: CRAFTHER.Backend/Services/ComponentService.cs
+using CRAFTHER.Backend.Data;
 using CRAFTHER.Backend.DTOs.Components;
 using CRAFTHER.Backend.DTOs; // For CurrentStockBalanceDto
 using CRAFTHER.Backend.Models;
@@ -7,16 +8,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CRAFTHER.Backend.Services; // เพิ่มเข้ามาสำหรับ IProductCostingService
 
 namespace CRAFTHER.Backend.Services
 {
     public class ComponentService : IComponentService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IProductCostingService _productCostingService; // Inject IProductCostingService แทน IProductService
 
-        public ComponentService(ApplicationDbContext context)
+        public ComponentService(ApplicationDbContext context, IProductCostingService productCostingService) // เปลี่ยน parameter ใน Constructor
         {
             _context = context;
+            _productCostingService = productCostingService; // Assign it
         }
 
         // Helper method to map Component Model to ComponentResponseDto
@@ -48,7 +52,6 @@ namespace CRAFTHER.Backend.Services
                 PurchaseUnitId = component.PurchaseUnitId,
                 PurchaseUnitName = component.PurchaseUnit?.UnitName ?? "N/A",
                 PurchaseUnitAbbreviation = component.PurchaseUnit?.Abbreviation ?? "N/A",
-                // *** เปลี่ยนชื่อตรงนี้: PurchaseToInventoryConversionFactor ***
                 PurchaseToInventoryConversionFactor = component.PurchaseToInventoryConversionFactor,
                 InventoryUnitId = component.InventoryUnitId,
                 InventoryUnitName = component.InventoryUnit?.UnitName ?? "N/A",
@@ -112,7 +115,6 @@ namespace CRAFTHER.Backend.Services
                 ImageUrl = createComponentDto.ImageUrl,
                 UnitPrice = createComponentDto.UnitPrice,
                 PurchaseUnitId = createComponentDto.PurchaseUnitId,
-                // *** เปลี่ยนชื่อตรงนี้: PurchaseToInventoryConversionFactor ***
                 PurchaseToInventoryConversionFactor = createComponentDto.PurchaseToInventoryConversionFactor,
                 InventoryUnitId = createComponentDto.InventoryUnitId,
                 CurrentStockQuantity = 0,
@@ -143,12 +145,13 @@ namespace CRAFTHER.Backend.Services
                 return null;
             }
 
+            bool unitPriceChanged = updateComponentDto.UnitPrice.HasValue && updateComponentDto.UnitPrice.Value != component.UnitPrice;
+
             if (updateComponentDto.ComponentName != null) component.ComponentName = updateComponentDto.ComponentName;
             if (updateComponentDto.Description != null) component.Description = updateComponentDto.Description;
             if (updateComponentDto.ImageUrl != null) component.ImageUrl = updateComponentDto.ImageUrl;
             if (updateComponentDto.UnitPrice.HasValue) component.UnitPrice = updateComponentDto.UnitPrice.Value;
             if (updateComponentDto.PurchaseUnitId.HasValue) component.PurchaseUnitId = updateComponentDto.PurchaseUnitId.Value;
-            // *** เปลี่ยนชื่อตรงนี้: PurchaseToInventoryConversionFactor ***
             if (updateComponentDto.PurchaseToInventoryConversionFactor.HasValue) component.PurchaseToInventoryConversionFactor = updateComponentDto.PurchaseToInventoryConversionFactor.Value;
             if (updateComponentDto.InventoryUnitId.HasValue) component.InventoryUnitId = updateComponentDto.InventoryUnitId.Value;
             if (updateComponentDto.MinimumStockLevel.HasValue) component.MinimumStockLevel = updateComponentDto.MinimumStockLevel.Value;
@@ -157,9 +160,11 @@ namespace CRAFTHER.Backend.Services
 
             await _context.SaveChangesAsync();
 
-            await _context.Entry(component).Reference(c => c.PurchaseUnit).LoadAsync();
-            await _context.Entry(component).Reference(c => c.InventoryUnit).LoadAsync();
-            await _context.Entry(component).Reference(c => c.Organization).LoadAsync();
+            // Trigger recalculation of affected products' costs if UnitPrice changed
+            if (unitPriceChanged)
+            {
+                await _productCostingService.RecalculateProductsAffectedByComponentPriceChange(component.ComponentId, component.OrganizationId); // เรียกใช้ ProductCostingService
+            }
 
             return (await MapComponentToResponseDto(component))!;
         }
@@ -206,5 +211,8 @@ namespace CRAFTHER.Backend.Services
 
             return component;
         }
+
+        // --- ลบเมธอด RecalculateComponentCostImpactOnProductsAsync ออกจาก ComponentService ---
+        // (ย้ายไปที่ ProductCostingService แล้ว)
     }
 }

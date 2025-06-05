@@ -14,10 +14,13 @@ namespace CRAFTHER.Backend.Models
         [ForeignKey("OrganizationId")]
         public Organization? Organization { get; set; }
 
-        [Required]
-        public Guid ComponentId { get; set; } // วัตถุดิบที่ถูกปรับปรุงสต็อก
+        public Guid? ComponentId { get; set; } // วัตถุดิบที่ถูกปรับปรุงสต็อก (Nullable)
         [ForeignKey("ComponentId")]
         public Component? Component { get; set; }
+
+        public Guid? ProductId { get; set; } // ผลิตภัณฑ์ที่ถูกปรับปรุงสต็อก (สำหรับ Finished Goods) (Nullable)
+        [ForeignKey("ProductId")]
+        public Product? Product { get; set; }
 
         [Required]
         public Guid AdjustmentTypeId { get; set; } // ประเภทของการปรับปรุง (Receive, Issue, etc.)
