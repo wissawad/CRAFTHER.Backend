@@ -160,9 +160,9 @@ namespace CRAFTHER.Backend.Controllers
         /// </summary>
         /// <param name="id">The ID of the product.</param>
         [HttpGet("{id}/stock-balance")]
-        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CurrentStockBalanceDtoxx))]
+        [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(CurrentStockBalanceDto))]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<CurrentStockBalanceDtoxx>> GetProductStockBalance(Guid id)
+        public async Task<ActionResult<CurrentStockBalanceDto>> GetProductStockBalance(Guid id)
         {
             var organizationId = GetOrganizationId();
             var stockBalance = await _productService.GetProductStockBalanceAsync(id, organizationId);

@@ -8,13 +8,28 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using CRAFTHER.Backend.Services;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider"); // อ่านค่า DatabaseProvider
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+{
+    if (databaseProvider == "SqlServer")
+    {
+        var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection") ?? throw new InvalidOperationException("Connection string 'SqlServerConnection' not found.");
+        options.UseSqlServer(connectionString);
+    }
+    else if (databaseProvider == "PostgreSql")
+    {
+        var connectionString = builder.Configuration.GetConnectionString("PostgreSqlConnection") ?? throw new InvalidOperationException("Connection string 'PostgreSqlConnection' not found.");
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        throw new InvalidOperationException($"Unsupported database provider: {databaseProvider}. Please set 'DatabaseProvider' to 'SqlServer' or 'PostgreSql' in appsettings.json.");
+    }
+});
 
 builder.Services.AddIdentity<ApplicationUser, ApplicationRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
