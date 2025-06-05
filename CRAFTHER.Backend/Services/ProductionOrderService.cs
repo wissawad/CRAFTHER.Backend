@@ -162,8 +162,8 @@ namespace CRAFTHER.Backend.Services
         public async Task<ProductionOrderResponseDto> CreateProductionOrderAsync(CreateProductionOrderDto createDto, Guid organizationId)
         {
             // 1. Verify Organization exists
-            var organizationExists = await _context.Organizations.AnyAsync(o => o.OrganizationId == organizationId);
-            if (!organizationExists)
+            var organization = await _context.Organizations.FindAsync(organizationId);
+            if (organization == null)
             {
                 throw new InvalidOperationException($"Organization with ID '{organizationId}' not found.");
             }
@@ -179,25 +179,44 @@ namespace CRAFTHER.Backend.Services
             }
 
             // 3. Verify UnitOfMeasure for QuantityToProduce is valid and matches ProductUnit
+            // (หรือสามารถแปลงได้ ถ้า ProductUnit กับ UnitOfMeasureId ที่ส่งมาไม่ตรงกัน)
             if (createDto.UnitOfMeasureId != product.ProductUnitId)
             {
-                // Optionally allow conversion if needed, but for simplicity assume ProductUnit for QuantityToProduce
-                throw new InvalidOperationException($"Quantity to produce must be in the product's primary unit ('{product.ProductUnit?.Abbreviation}'). Provided unit ID '{createDto.UnitOfMeasureId}' does not match product unit ID '{product.ProductUnitId}'.");
+                // ลองตรวจสอบ Conversion Factor เพื่อให้ยืดหยุ่นมากขึ้น
+                var conversionFactorFromProduceUnitToProductUnit = await _unitConversionService.GetConversionFactorAsync(
+                    createDto.UnitOfMeasureId, product.ProductUnitId, organizationId);
+
+                if (!conversionFactorFromProduceUnitToProductUnit.HasValue || conversionFactorFromProduceUnitToProductUnit.Value == 0)
+                {
+                    throw new InvalidOperationException($"Quantity to produce must be in the product's primary unit ('{product.ProductUnit?.Abbreviation}') or a convertible unit. No valid conversion found from unit '{createDto.UnitOfMeasureId}' to '{product.ProductUnitId}'.");
+                }
+                // ถ้ามีการแปลง หน่วยที่ใช้ในการผลิตจะถูกแปลงเป็นหน่วยของ Product.ProductUnit
+                createDto.QuantityToProduce *= conversionFactorFromProduceUnitToProductUnit.Value;
+                createDto.UnitOfMeasureId = product.ProductUnitId; // อัปเดตให้เป็นหน่วยของ Product
             }
 
-            // 4. Generate Production Order Code if not provided (or ensure uniqueness)
-            // Assuming ProductionOrderCode is provided and checked for uniqueness in controller/validation.
+            // 4. Generate Production Order Code (ถ้าไม่มีการส่งมา หรือ ต้องการให้ Gen อัตโนมัติ)
+            // ณ ตอนนี้ DTO บังคับให้ส่ง ProductionOrderCode มาแล้ว ดังนั้นเราจะใช้ค่าจาก DTO
+            // ถ้าอยากให้ Gen อัตโนมัติ สามารถเพิ่ม Logic นับเลขที่ต่อจากรหัสสุดท้ายใน DB หรือใช้ Guid.NewGuid().ToString("N").Substring(0, 8)
+            // แต่เนื่องจาก DTO กำหนด [Required] ไว้แล้ว เราจะใช้ค่าที่ส่งมา
+            var productionOrderCode = createDto.ProductionOrderCode; // ใช้ค่าที่ส่งมาจาก DTO
+            // Optional: ตรวจสอบความซ้ำซ้อนของ ProductionOrderCode
+            var codeExists = await _context.ProductionOrders.AnyAsync(po => po.OrganizationId == organizationId && po.ProductionOrderCode == productionOrderCode);
+            if (codeExists)
+            {
+                throw new InvalidOperationException($"Production Order Code '{productionOrderCode}' already exists for this organization.");
+            }
 
             var productionOrder = new ProductionOrder
             {
                 ProductionOrderId = Guid.NewGuid(),
-                ProductionOrderCode = createDto.ProductionOrderCode,
+                ProductionOrderCode = productionOrderCode, // ใช้ Code จาก DTO
                 OrganizationId = organizationId,
                 ProductId = createDto.ProductId,
                 QuantityToProduce = createDto.QuantityToProduce,
                 UnitOfMeasureId = createDto.UnitOfMeasureId,
                 Status = createDto.Status,
-                OrderDate = DateTime.UtcNow, // Set to current UTC time
+                OrderDate = DateTime.UtcNow,
                 DueDate = createDto.DueDate,
                 Notes = createDto.Notes,
                 CreatedAt = DateTime.UtcNow,
@@ -205,12 +224,107 @@ namespace CRAFTHER.Backend.Services
             };
 
             _context.ProductionOrders.Add(productionOrder);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); // บันทึก Production Order Header ก่อน
 
-            // After creating the Production Order, we don't automatically generate Production Order Items here.
-            // Production Order Items will be added separately, possibly based on the BOM, as the order progresses.
-            // Or a "Generate Production Items from BOM" action can be added.
-            // For now, we just create the header.
+            // 5. สร้าง Production Order Items จาก BOM ของ Product ที่ผลิต
+            var bomItems = await _context.BOMItems
+                .Where(bi => bi.ParentProductId == product.ProductId)
+                .Include(bi => bi.Component).ThenInclude(c => c!.InventoryUnit) // Eager load for Component
+                .Include(bi => bi.SubProduct).ThenInclude(p => p!.ProductUnit)   // Eager load for SubProduct
+                .Include(bi => bi.UsageUnit) // Eager load for UsageUnit
+                .AsNoTracking()
+                .ToListAsync();
+
+            if (!bomItems.Any())
+            {
+                // ถ้าไม่มี BOM ให้ Product นี้ อาจจะอนุญาตให้สร้าง Production Order ได้ (ถ้า Product นั้นไม่จำเป็นต้องมี BOM)
+                // หรืออาจจะ Throw Error ถ้า Product ต้องมี BOM เสมอ
+                // สำหรับตอนนี้ เราจะถือว่าถ้าไม่มี BOM ก็สร้างได้ แต่จะไม่มี ProductionOrderItems
+                // หรืออาจจะโยน Exception: throw new InvalidOperationException($"Product '{product.ProductName}' does not have a Bill of Materials defined.");
+            }
+
+            var productionOrderItems = new List<ProductionOrderItem>();
+            foreach (var bomItem in bomItems)
+            {
+                // คำนวณปริมาณที่ต้องใช้สำหรับ Production Order ทั้งหมด
+                decimal quantityNeededForOrder = bomItem.Quantity * createDto.QuantityToProduce;
+                decimal quantityNeededAdjustedForWaste = quantityNeededForOrder * (1 + bomItem.WastePercentage / 100.0m);
+
+                Guid itemStockUnitId; // InventoryUnitId for Component, ProductUnitId for SubProduct
+                decimal currentItemCost; // ต้นทุน ณ ปัจจุบันของวัตถุดิบ/SubProduct
+                Guid? componentId = null;
+                Guid? subProductId = null;
+                string itemType;
+
+                if (bomItem.ComponentType.ToUpper() == "COMPONENT")
+                {
+                    if (bomItem.Component == null)
+                        throw new InvalidOperationException($"Component for BOM Item '{bomItem.BOMItemId}' not found during Production Order creation.");
+                    itemStockUnitId = bomItem.Component.InventoryUnitId;
+                    itemType = "COMPONENT";
+                    componentId = bomItem.ComponentId;
+                    // ต้นทุนของ Component คือ UnitPrice * PurchaseToInventoryConversionFactor
+                    currentItemCost = bomItem.Component.UnitPrice * bomItem.Component.PurchaseToInventoryConversionFactor;
+                }
+                else if (bomItem.ComponentType.ToUpper() == "PRODUCT") // SubProduct
+                {
+                    if (bomItem.SubProduct == null)
+                        throw new InvalidOperationException($"SubProduct for BOM Item '{bomItem.BOMItemId}' not found during Production Order creation.");
+                    itemStockUnitId = bomItem.SubProduct.ProductUnitId;
+                    itemType = "PRODUCT";
+                    subProductId = bomItem.ProductId;
+                    // ต้นทุนของ SubProduct คือ CalculatedCost
+                    currentItemCost = bomItem.SubProduct.CalculatedCost;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unsupported ItemType '{bomItem.ComponentType}' in BOMItem for Production Order creation.");
+                }
+
+                // แปลงปริมาณที่ต้องใช้จาก UsageUnit ของ BOMItem ไปยังหน่วยสต็อกหลัก (Inventory/Product Unit) ของ Item
+                decimal? conversionFactorFromUsageToStockUnit = await _unitConversionService.GetConversionFactorAsync(
+                    bomItem.UsageUnitId, itemStockUnitId, organizationId);
+
+                if (!conversionFactorFromUsageToStockUnit.HasValue || conversionFactorFromUsageToStockUnit.Value == 0)
+                {
+                    throw new InvalidOperationException($"No valid conversion factor found from BOM Item usage unit '{bomItem.UsageUnit?.Abbreviation}' to item's stock unit.");
+                }
+
+                decimal finalQuantityInStockUnit = quantityNeededAdjustedForWaste * conversionFactorFromUsageToStockUnit.Value;
+
+                // ตรวจสอบสต็อกว่าเพียงพอหรือไม่
+                if (itemType == "COMPONENT" && bomItem.Component!.CurrentStockQuantity < finalQuantityInStockUnit)
+                {
+                    throw new InvalidOperationException($"Insufficient stock for component '{bomItem.Component.ComponentName}'. Available: {bomItem.Component.CurrentStockQuantity} {bomItem.Component.InventoryUnit?.Abbreviation}, Required: {finalQuantityInStockUnit} {bomItem.Component.InventoryUnit?.Abbreviation}.");
+                }
+                if (itemType == "PRODUCT" && bomItem.SubProduct!.CurrentStockQuantity < finalQuantityInStockUnit)
+                {
+                    throw new InvalidOperationException($"Insufficient stock for sub-product '{bomItem.SubProduct.ProductName}'. Available: {bomItem.SubProduct.CurrentStockQuantity} {bomItem.SubProduct.ProductUnit?.Abbreviation}, Required: {finalQuantityInStockUnit} {bomItem.SubProduct.ProductUnit?.Abbreviation}.");
+                }
+
+
+                productionOrderItems.Add(new ProductionOrderItem
+                {
+                    ProductionOrderItemId = Guid.NewGuid(),
+                    ProductionOrderId = productionOrder.ProductionOrderId,
+                    ComponentId = componentId,
+                    ProductId = subProductId,
+                    ItemType = itemType,
+                    QuantityUsed = quantityNeededForOrder, // ปริมาณตามสูตรก่อนปรับ Waste
+                    UsageUnitId = bomItem.UsageUnitId,
+                    UnitCostAtProduction = currentItemCost, // ต้นทุน ณ เวลาที่สร้าง PO
+                    QuantityUsedInInventoryUnit = finalQuantityInStockUnit, // ปริมาณที่ใช้จริงรวม Waste และแปลงหน่วยแล้ว
+                    Notes = bomItem.Remarks,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+
+            if (productionOrderItems.Any())
+            {
+                _context.ProductionOrderItems.AddRange(productionOrderItems);
+                await _context.SaveChangesAsync(); // บันทึก Production Order Items
+            }
 
             return (await MapProductionOrderToResponseDto(productionOrder))!;
         }
@@ -220,22 +334,77 @@ namespace CRAFTHER.Backend.Services
         {
             var productionOrder = await _context.ProductionOrders
                 .Where(po => po.ProductionOrderId == updateDto.ProductionOrderId && po.OrganizationId == organizationId)
-                .FirstOrDefaultAsync();
+                .Include(po => po.Product).ThenInclude(p => p!.ProductUnit) // Include Product and its ProductUnit
+                .Include(po => po.ProductionOrderItems) // Include items if needed for business rules or recalculations
+                    .ThenInclude(poi => poi.Component!).ThenInclude(c => c.InventoryUnit)
+                .Include(po => po.ProductionOrderItems)
+                    .ThenInclude(poi => poi.SubProduct!).ThenInclude(p => p.ProductUnit)
+                .FirstOrDefaultAsync(); // ไม่ใช้ AsNoTracking() เพราะเราจะ Update Entity นี้
 
             if (productionOrder == null)
             {
                 return null; // Not found or does not belong to the organization
             }
 
-            // Apply updates
-            if (updateDto.Status != null) productionOrder.Status = updateDto.Status;
-            if (updateDto.QuantityToProduce.HasValue) productionOrder.QuantityToProduce = updateDto.QuantityToProduce.Value;
+            // Business Rule: ห้ามแก้ไข Production Order ที่มีสถานะ Completed หรือ Cancelled
+            if (productionOrder.Status == "Completed" || productionOrder.Status == "Cancelled")
+            {
+                throw new InvalidOperationException($"Cannot update Production Order '{productionOrder.ProductionOrderCode}' because it is already in '{productionOrder.Status}' status.");
+            }
+
+            // Apply updates if values are provided in DTO
+            bool quantityChanged = false;
+            if (updateDto.QuantityToProduce.HasValue && updateDto.QuantityToProduce.Value != productionOrder.QuantityToProduce)
+            {
+                if (updateDto.QuantityToProduce.Value <= 0)
+                {
+                    throw new ArgumentException("Quantity to produce must be greater than zero.");
+                }
+                // ตรวจสอบหน่วยของ QuantityToProduce ถ้ามีการเปลี่ยนแปลง DTO อาจจะส่งหน่วยมาด้วยก็ได้
+                // แต่ตาม DTO ปัจจุบัน QuantityToProduce และ UnitOfMeasureId ไม่ควรเปลี่ยนหลังจากสร้าง
+                // ถ้า DTO อนุญาตให้เปลี่ยน UnitOfMeasureId ด้วย จะต้องทำการแปลงหน่วยตรงนี้ด้วย
+                // สำหรับตอนนี้ เราจะถือว่า QuantityToProduce คือหน่วยของ Product.ProductUnit
+                productionOrder.QuantityToProduce = updateDto.QuantityToProduce.Value;
+                quantityChanged = true;
+            }
+
             if (updateDto.DueDate.HasValue) productionOrder.DueDate = updateDto.DueDate.Value;
-            if (updateDto.CompletionDate.HasValue) productionOrder.CompletionDate = updateDto.CompletionDate.Value;
+            if (updateDto.CompletionDate.HasValue) productionOrder.CompletionDate = updateDto.CompletionDate.Value; // ตรงนี้จะใช้เมื่อเรียก CompleteProductionOrderAsync
             if (updateDto.Notes != null) productionOrder.Notes = updateDto.Notes;
 
-            productionOrder.UpdatedAt = DateTime.UtcNow;
+            // การเปลี่ยนสถานะ: ควรมี Logic ในการตรวจสอบสถานะที่ถูกต้อง
+            if (updateDto.Status != null && updateDto.Status != productionOrder.Status)
+            {
+                // ตัวอย่าง Business Rules สำหรับการเปลี่ยนสถานะ
+                if (productionOrder.Status == "Pending" && (updateDto.Status == "InProgress" || updateDto.Status == "Cancelled"))
+                {
+                    productionOrder.Status = updateDto.Status;
+                }
+                else if (productionOrder.Status == "InProgress" && (updateDto.Status == "Completed" || updateDto.Status == "Cancelled"))
+                {
+                    productionOrder.Status = updateDto.Status;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Invalid status transition from '{productionOrder.Status}' to '{updateDto.Status}'.");
+                }
+            }
+
+            productionOrder.UpdatedAt = DateTime.UtcNow; // อัปเดต timestamp
             await _context.SaveChangesAsync();
+
+            // ถ้า QuantityToProduce เปลี่ยนแปลง อาจจะต้อง recalculate ProductionOrderItems
+            // สำหรับ MVP, เราอาจจะไม่อนุญาตให้อัปเดต ProductionOrderItems ผ่าน Update ProductionOrder Header โดยตรง
+            // แต่จะให้มี API แยกสำหรับการจัดการ ProductionOrderItems หรือ Recalculate BOM
+            // หรือ ถ้าอยากให้ recalculate อัตโนมัติเมื่อ QuantityToProduce เปลี่ยน
+            if (quantityChanged && productionOrder.ProductionOrderItems != null)
+            {
+                // Logic สำหรับ Recalculate/Re-create ProductionOrderItems หาก QuantityToProduce เปลี่ยน
+                // ณ ตอนนี้ เราจะปล่อยให้เป็นไปตามสถานะปัจจุบัน และคาดว่าถ้ามีการเปลี่ยนแปลงปริมาณ จะมีการปรับ ProductionOrderItem เอง
+                // หรืออาจจะเรียกเมธอด GetRequiredMaterialsForProductionAsync เพื่อแสดงผลใหม่
+                // หรือลบ ProductionOrderItems เดิมทิ้ง แล้วสร้างใหม่ทั้งหมด (ซึ่งอาจจะอันตรายถ้ามีการบันทึก Actuals แล้ว)
+                // สำหรับ MVP, เราจะเน้นที่การอัปเดต Header และอนุญาตให้ Logic ของ ProductionOrderItem ทำงานแยกกัน
+            }
 
             return (await MapProductionOrderToResponseDto(productionOrder))!;
         }
@@ -244,6 +413,11 @@ namespace CRAFTHER.Backend.Services
         {
             var productionOrder = await _context.ProductionOrders
                 .Where(po => po.ProductionOrderId == productionOrderId && po.OrganizationId == organizationId)
+                .Include(po => po.Product).ThenInclude(p => p!.ProductUnit) // Include Product and its ProductUnit
+                .Include(po => po.ProductionOrderItems) // Include items to check if any consumption/production occurred
+                    .ThenInclude(poi => poi.Component!).ThenInclude(c => c.InventoryUnit)
+                .Include(po => po.ProductionOrderItems)
+                    .ThenInclude(poi => poi.SubProduct!).ThenInclude(p => p.ProductUnit)
                 .FirstOrDefaultAsync();
 
             if (productionOrder == null)
@@ -251,13 +425,18 @@ namespace CRAFTHER.Backend.Services
                 return false; // Not found or does not belong to the organization
             }
 
-            // Prevent deletion if already completed or in progress (business rule)
+            // Business Rule: ไม่อนุญาตให้ลบ Production Order ที่มีสถานะ "Completed" หรือ "InProgress"
+            // หากต้องการลบ ต้องเปลี่ยนสถานะเป็น "Cancelled" ก่อน และจัดการเรื่อง Revert Stock ด้วยมือ (หากจำเป็น)
+            // หรือสร้าง Logic Revert Stock อัตโนมัติเมื่อเปลี่ยนเป็น Cancelled
             if (productionOrder.Status == "Completed" || productionOrder.Status == "InProgress")
             {
-                throw new InvalidOperationException($"Cannot delete Production Order '{productionOrder.ProductionOrderCode}' with status '{productionOrder.Status}'. Please cancel it first.");
+                throw new InvalidOperationException($"Cannot delete Production Order '{productionOrder.ProductionOrderCode}' with status '{productionOrder.Status}'. It must be 'Pending' or 'Cancelled' to be deleted.");
             }
-            // If the status is not "Completed" or "InProgress", it implies no stock adjustments have been made for it yet.
-            // If ProductionOrderItems already exist, they will be cascade deleted by EF Core (configured in DbContext).
+
+            // If the status is "Pending" or "Cancelled", we assume no stock adjustments have been permanently made yet.
+            // If ProductionOrderItems already exist and are linked to actual stock movements (e.g., if we allowed partial completion),
+            // then a more complex revert logic would be needed here.
+            // For MVP simplicity, we assume 'Pending' or 'Cancelled' status means no stock impact yet.
 
             _context.ProductionOrders.Remove(productionOrder);
             await _context.SaveChangesAsync();
