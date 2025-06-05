@@ -13,6 +13,8 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddHttpContextAccessor();
+
 var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider"); // อ่านค่า DatabaseProvider
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
@@ -111,6 +113,7 @@ builder.Services.AddScoped<IUnitOfMeasureService, UnitOfMeasureService>();
 builder.Services.AddScoped<IUnitConversionService, UnitConversionService>();
 builder.Services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
 builder.Services.AddScoped<IItemCategoryService, ItemCategoryService>();
+builder.Services.AddScoped<IProductionOrderService, ProductionOrderService>();
 
 var app = builder.Build();
 

@@ -22,14 +22,14 @@ namespace CRAFTHER.Backend.Controllers
         // Helper method to get OrganizationId from claims (same as in ProductController)
         private Guid GetOrganizationId()
         {
-            // !!! IMPORTANT: REPLACE THIS WITH ACTUAL AUTHENTICATION LOGIC IN PRODUCTION !!!
-            // Example:
-            // var organizationIdClaim = User.FindFirst("organizationId")?.Value;
-            // if (Guid.TryParse(organizationIdClaim, out var orgId))
-            // {
-            //     return orgId;
-            // }
-            return Guid.Parse("YOUR_DEFAULT_ORGANIZATION_ID_HERE"); // <-- REPLACE THIS GUID!
+            // ดึง OrganizationId จาก Claims ของผู้ใช้งานที่ Login อยู่
+            var organizationIdClaim = User.FindFirst("OrganizationId")?.Value;
+            if (string.IsNullOrEmpty(organizationIdClaim) || !Guid.TryParse(organizationIdClaim, out var orgId))
+            {
+                // ถ้าหา Claim ไม่เจอ หรือแปลงไม่ได้ แสดงว่า Token มีปัญหา หรือ User ไม่ได้ผูกกับ Organization
+                throw new InvalidOperationException("Organization ID claim not found or invalid for the authenticated user.");
+            }
+            return orgId;
         }
 
         /// <summary>

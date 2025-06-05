@@ -25,11 +25,9 @@ namespace CRAFTHER.Backend.Data
         public DbSet<UnitConversion> UnitConversions { get; set; } = default!;
         public DbSet<StockAdjustmentType> StockAdjustmentTypes { get; set; } = default!;
         public DbSet<StockAdjustment> StockAdjustments { get; set; } = default!;
-
-        // --- เพิ่ม DbSets สำหรับ ProductionOrder Models ---
         public DbSet<ProductionOrder> ProductionOrders { get; set; } = default!;
         public DbSet<ProductionOrderItem> ProductionOrderItems { get; set; } = default!;
-        // --------------------------------------------------
+        public DbSet<ComponentPriceHistory> ComponentPriceHistories { get; set; } = default!;
 
         // DbSets for Quest Models
         public DbSet<Quest> Quests { get; set; } = default!;
@@ -309,6 +307,33 @@ namespace CRAFTHER.Backend.Data
                 .HasIndex(poi => new { poi.ProductionOrderId, poi.ComponentId, poi.ProductId })
                 .IsUnique();
             // ----------------------------------------------
+
+            // *** เพิ่ม ComponentPriceHistory Configuration ***
+            modelBuilder.Entity<ComponentPriceHistory>()
+                .HasOne(cph => cph.Component)
+                .WithMany() // Component อาจจะไม่มี Collection ของ Price Histories โดยตรง
+                .HasForeignKey(cph => cph.ComponentId)
+                .OnDelete(DeleteBehavior.Cascade); // ถ้าลบ Component ให้ลบประวัติราคาด้วย
+
+            modelBuilder.Entity<ComponentPriceHistory>()
+                .HasOne(cph => cph.Organization)
+                .WithMany() // Organization อาจจะไม่มี Collection ของ Price Histories โดยตรง
+                .HasForeignKey(cph => cph.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict); // ป้องกันลบ Organization ถ้ามีประวัติราคาผูกอยู่
+
+            // Optional: ถ้ามี ChangedByUserId
+            modelBuilder.Entity<ComponentPriceHistory>()
+                .HasOne(cph => cph.ChangedByUser)
+                .WithMany()
+                .HasForeignKey(cph => cph.ChangedByUserId)
+                .OnDelete(DeleteBehavior.SetNull); // ถ้า User ถูกลบ ให้ ChangedByUserId เป็น null (หรือ Restrict)
+
+            // Optional: Unique Index เพื่อป้องกันการบันทึกซ้ำซ้อนในวันเดียวกัน หรือตามความต้องการ
+            // เช่น อาจจะอยากมีแค่ 1 record ต่อวันต่อ Component
+            // modelBuilder.Entity<ComponentPriceHistory>()
+            //    .HasIndex(cph => new { cph.ComponentId, cph.ChangeDate.Date }) // Index by Component and Date only
+            //    .IsUnique();
+            // ************************************************
 
 
             // *** Quest Models Configuration (You must define relationships here if they exist) ***

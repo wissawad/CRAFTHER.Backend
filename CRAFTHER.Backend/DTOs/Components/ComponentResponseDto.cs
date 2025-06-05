@@ -25,6 +25,9 @@
         public decimal CurrentStockQuantity { get; set; }
         public decimal MinimumStockLevel { get; set; }
 
+        public Guid ItemCategoryId { get; set; }
+        public string ItemCategoryName { get; set; } = string.Empty;
+
         // Flattened Organization details
         public Guid OrganizationId { get; set; }
         public string OrganizationName { get; set; } = string.Empty;

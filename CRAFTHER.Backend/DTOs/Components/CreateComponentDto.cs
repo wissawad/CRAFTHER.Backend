@@ -39,5 +39,8 @@ namespace CRAFTHER.Backend.DTOs.Components
 
         [Required(ErrorMessage = "Organization ID is required.")]
         public Guid OrganizationId { get; set; }
+
+        [Required(ErrorMessage = "Item Category ID is required.")]
+        public Guid ItemCategoryId { get; set; }
     }
 }
